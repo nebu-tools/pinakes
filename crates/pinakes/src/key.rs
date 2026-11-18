@@ -212,11 +212,18 @@ mod tests {
         assign_keys(&mut refs, true);
         assert_eq!(refs[2].citation_key.as_deref(), Some("lind2020tideb"));
         // A CSL id shaped like a key is the key; a number or a URI is not.
-        let mut csl = vec![r("Lind", 2020, "Tide"), r("Lind", 2020, "Tide"), r("Lind", 2020, "Tide")];
+        let mut csl = vec![
+            r("Lind", 2020, "Tide"),
+            r("Lind", 2020, "Tide"),
+            r("Lind", 2020, "Tide"),
+        ];
         csl[0].id = "lind-tides".into();
         csl[1].id = "12".into();
         csl[2].id = "http://zotero.org/users/1/items/AB".into();
-        assert_eq!(keys_for_writing(&csl), ["lind-tides", "lind2020tide", "lind2020tidea"]);
+        assert_eq!(
+            keys_for_writing(&csl),
+            ["lind-tides", "lind2020tide", "lind2020tidea"]
+        );
         assert_eq!(suffix(25), "z");
         assert_eq!(suffix(26), "aa");
     }
