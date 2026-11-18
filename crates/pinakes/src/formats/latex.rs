@@ -442,13 +442,15 @@ fn reverse_symbol(c: char) -> Option<&'static str> {
 /// case.
 pub fn text_to_latex(s: &str, ascii: bool, protect: bool) -> String {
     let mut out = String::with_capacity(s.len() + 8);
-    let s = html_to_latex(s);
+    // BibTeX reads any run of white space, line breaks included, as one space; write it so,
+    // so that reading back is stable.
+    let s = html_to_latex(&crate::text::squash(&s.replace(['\r', '\n'], " ")));
     let words = split_keep(&s);
     for w in words {
         let needs_protect = protect
             && w.chars().skip(1).any(|c| c.is_uppercase())
             && w.chars().any(|c| c.is_alphabetic())
-            && !w.contains('\\');
+            && !w.contains(['\\', '\u{1}']);
         if needs_protect {
             out.push('{');
         }
@@ -547,6 +549,13 @@ fn split_keep(s: &str) -> Vec<String> {
                 out.push(std::mem::take(&mut cur));
             }
             out.push(c.to_string());
+        } else if c == '\u{1}' {
+            // A command starts a word of its own, so protecting the word before it cannot
+            // swallow the command's name.
+            if !cur.is_empty() {
+                out.push(std::mem::take(&mut cur));
+            }
+            cur.push(c);
         } else {
             cur.push(c);
         }

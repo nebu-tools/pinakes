@@ -176,11 +176,24 @@ fn person(family: &str, given: Option<&str>, suffix: Option<&str>) -> Name {
     }
 }
 
-/// Read a name as RIS, MEDLINE, Web of Science and spreadsheets write it.
+/// Read a RIS name. RIS writes persons as "Family, Given"; a comma-free name of several words
+/// that is not in Vancouver form ("Smith JA") is an organisation, so it is kept whole.
+pub fn parse_ris_name(input: &str) -> Name {
+    let s = crate::text::squash(input.trim().trim_end_matches([';', ',']));
+    let words: Vec<&str> = s.split(' ').collect();
+    if !s.contains(',')
+        && words.len() > 1
+        && !(is_initials(words[words.len() - 1]) && !is_initials(words[0]))
+    {
+        return Name::literal(&s);
+    }
+    parse_name(&s)
+}
+
+/// Read a name as MEDLINE, Web of Science and spreadsheets write it.
 ///
 /// "Family, Given", "Family, Given, Suffix", "Family Initials" (Vancouver), "Given Family", a
-/// single word, or an organisation. A comma-free name of several words that is not in
-/// Vancouver form is read as an organisation, as RIS defines persons with a comma.
+/// single word, or an organisation.
 pub fn parse_name(input: &str) -> Name {
     let s = crate::text::squash(input.trim().trim_end_matches([';', ',']));
     if s.is_empty() {

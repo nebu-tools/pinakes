@@ -1,9 +1,10 @@
 //! Citation keys: `family` + `year` + the first significant word of the title.
 //!
 //! `okafor2019moths` for Okafor (2019) "The moths of the forest edge". Keys are ASCII letters
-//! and digits: names and titles are folded ("Ødegård" to "odegard"), and scripts with no Latin
+//! and digits: names and titles are folded ("Ødegård" to "odegaard"), and scripts with no Latin
 //! folding contribute nothing. When two records would share a key, the second gets `a`, the
-//! third `b`, and so on, the way Better BibTeX does it. A key a record already has is kept.
+//! third `b`, and so on, the way Better BibTeX does it. A key a record already has is kept. A
+//! record with no author or editor takes the first word of its publisher instead.
 
 use crate::model::Reference;
 use crate::text::fold_for_key;
@@ -29,27 +30,22 @@ fn word_part(s: &str) -> String {
 
 /// The key a reference would get with no collisions.
 pub fn key_for(r: &Reference) -> String {
-    let who = r
-        .author
-        .first()
-        .or(r.editor.first())
-        .map(|n| match (&n.literal, &n.family) {
-            // An organisation: its first significant word.
-            (Some(l), _) => l
-                .split_whitespace()
-                .map(word_part)
-                .find(|w| !w.is_empty() && !STOP_WORDS.contains(&w.as_str()))
-                .unwrap_or_default(),
-            (None, Some(f)) => {
-                let fam = match &n.particle {
-                    Some(p) => format!("{p}{f}"),
-                    None => f.clone(),
-                };
-                word_part(&fam)
-            }
+    let first_word = |s: &str| {
+        s.split_whitespace()
+            .map(word_part)
+            .find(|w| !w.is_empty() && !STOP_WORDS.contains(&w.as_str()))
+            .unwrap_or_default()
+    };
+    // The first author or editor; with neither, the publisher, which for a report is the
+    // body that issued it.
+    let who = match r.author.first().or(r.editor.first()) {
+        Some(n) => match (&n.literal, &n.family) {
+            (Some(l), _) => first_word(l),
+            (None, Some(f)) => word_part(&format!("{}{f}", n.particle.as_deref().unwrap_or(""))),
             (None, None) => n.given.as_deref().map(word_part).unwrap_or_default(),
-        })
-        .unwrap_or_default();
+        },
+        None => r.publisher.as_deref().map(first_word).unwrap_or_default(),
+    };
     let year = r.year().map(|y| y.to_string()).unwrap_or_default();
     let title = r
         .title

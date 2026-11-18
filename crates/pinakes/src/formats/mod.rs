@@ -55,6 +55,12 @@ impl Format {
         Format::Hayagriva,
     ];
 
+    /// Whether one reader serves both formats, so either name reads the other's files.
+    pub(crate) fn same_family(self, other: Format) -> bool {
+        use Format::*;
+        self == other || matches!((self, other), (Bibtex | Biblatex, Bibtex | Biblatex))
+    }
+
     /// The name the CLI and bindings use.
     pub fn name(self) -> &'static str {
         match self {

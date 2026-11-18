@@ -60,6 +60,25 @@ impl Library {
 /// Windows-1252 (Latin-1), and line endings are normalised.
 pub fn read(bytes: &[u8], format: Option<Format>) -> Library {
     let mut diagnostics = Vec::new();
+    for (magic, what) in [
+        (
+            &b"PK\x03\x04"[..],
+            "a ZIP archive, such as an Excel workbook",
+        ),
+        (b"%PDF", "a PDF"),
+    ] {
+        if bytes.starts_with(magic) {
+            diagnostics.push(Diagnostic::error(
+                "format.binary",
+                format!("The input is {what}, not text; export it as CSV, RIS or BibTeX first"),
+            ));
+            return Library {
+                references: Vec::new(),
+                diagnostics,
+                format: None,
+            };
+        }
+    }
     let text = text::decode(bytes, &mut diagnostics);
     read_decoded(&text, format, diagnostics)
 }
@@ -88,6 +107,19 @@ fn read_decoded(text: &str, format: Option<Format>, mut diagnostics: Vec<Diagnos
             };
         }
     };
+    // A format named by the caller that the content plainly contradicts would be read as
+    // nonsense: RIS read as Web of Science makes "- Moths" a title. Refuse it instead.
+    if let Some(seen) = Format::sniff(text).filter(|seen| !seen.same_family(format)) {
+        diagnostics.push(Diagnostic::error(
+            "format.mismatch",
+            format!("Asked to read {format}, but the input is {seen}; read nothing"),
+        ));
+        return Library {
+            references: Vec::new(),
+            diagnostics,
+            format: Some(format),
+        };
+    }
     let references = formats::read_text(format, text, &mut diagnostics);
     Library {
         references,

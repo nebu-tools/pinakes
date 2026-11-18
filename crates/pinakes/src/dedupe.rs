@@ -4,7 +4,7 @@
 //!
 //! 1. The first identifier both records have decides, in the order DOI, PMID, PMCID. The same
 //!    value makes a candidate; different values mean two publications, whatever the titles say.
-//! 2. Without a shared identifier, two titles that both name a trial, phase, follow-up time or
+//! 2. Without a shared identifier, two titles that both name a study acronym, phase, follow-up time or
 //!    study number, and name different ones, are different publications. So are records more
 //!    than a year apart, or with different first-author family names.
 //! 3. What is left is a candidate when the titles, folded, score at least 90 on token-sort
@@ -126,7 +126,7 @@ struct Facts {
     sorted: Vec<char>,
     words: Vec<String>,
     prepared: String,
-    trial_names: HashSet<String>,
+    study_names: HashSet<String>,
     before_numbers: HashSet<String>,
     version: Version,
 }
@@ -266,7 +266,7 @@ fn facts(r: &Reference) -> Facts {
         author_shown,
         sorted,
         words,
-        trial_names: trial_names(&prepared),
+        study_names: study_names(&prepared),
         before_numbers: words_before_numbers(&prepared),
         prepared,
         version: version(r),
@@ -347,7 +347,7 @@ struct Patterns {
     phase: Regex,
     follow_up: [Regex; 2],
     study: Regex,
-    trial_name: Regex,
+    study_name: Regex,
     named_number: Regex,
     number: Regex,
 }
@@ -365,14 +365,14 @@ fn patterns() -> &'static Patterns {
                 re(&format!(r"(?i)\b(?P<unit>year|month|week|day)s?\s+(?P<a>\d+){range}\b")),
             ],
             study: re(&format!(r"(?i)\b(?:study|trial)\s*(?:no\.?|number|#)?\s*(?P<a>\d+){range}\b")),
-            trial_name: re(r"\b([A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?\d"),
+            study_name: re(r"\b([A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?\d"),
             named_number: re(r"\b(?P<w>[A-Za-z]+)[\s_-]?(?P<n>\d+)"),
             number: re(r"^(?P<base>iv|v|i{1,3}|\d+(?:\.\d+)?)(?P<suffix>[a-c]?)$"),
         }
     })
 }
 
-const NOT_TRIAL_NAMES: &[&str] = &[
+const NOT_STUDY_NAMES: &[&str] = &[
     "phase", "week", "weeks", "month", "months", "year", "years", "study", "trial", "part",
     "cohort", "arm", "day", "days", "stage", "grade", "type", "version", "volume", "vol", "no",
     "number",
@@ -452,9 +452,9 @@ fn ends(m: &Captures) -> Vec<String> {
         .collect()
 }
 
-fn trial_names(prepared: &str) -> HashSet<String> {
+fn study_names(prepared: &str) -> HashSet<String> {
     patterns()
-        .trial_name
+        .study_name
         .captures_iter(prepared)
         .map(|c| c[1].to_lowercase())
         .collect()
@@ -465,7 +465,7 @@ fn words_before_numbers(prepared: &str) -> HashSet<String> {
         .named_number
         .captures_iter(prepared)
         .map(|m| m["w"].to_lowercase())
-        .filter(|w| w.chars().count() > 1 && !NOT_TRIAL_NAMES.contains(&w.as_str()))
+        .filter(|w| w.chars().count() > 1 && !NOT_STUDY_NAMES.contains(&w.as_str()))
         .collect()
 }
 
@@ -504,14 +504,14 @@ fn tokens(prepared: &str, names: &HashSet<String>) -> Tokens {
 }
 
 fn tokens_conflict(a: &Facts, b: &Facts) -> bool {
-    let mut names: HashSet<String> = a.trial_names.union(&b.trial_names).cloned().collect();
+    let mut names: HashSet<String> = a.study_names.union(&b.study_names).cloned().collect();
     names.extend(a.before_numbers.intersection(&b.before_numbers).cloned());
     let ta = tokens(&a.prepared, &names);
     let tb = tokens(&b.prepared, &names);
     (0..4).any(|k| !ta.kinds[k].is_empty() && !tb.kinds[k].is_empty() && ta.kinds[k] != tb.kinds[k])
 }
 
-/// Whether two titles name different trials, phases, follow-up times or study numbers.
+/// Whether two titles name different study acronyms, phases, follow-up times or study numbers.
 pub fn titles_conflict(a: &str, b: &str) -> bool {
     let fa = facts(&Reference {
         title: Some(a.into()),
@@ -789,12 +789,12 @@ mod tests {
     #[test]
     fn tokens_like_kittum() {
         assert!(titles_conflict(
-            "Phase II trial of moth counts",
-            "Phase III trial of moth counts"
+            "Phase II survey of moth counts",
+            "Phase III survey of moth counts"
         ));
         assert!(!titles_conflict(
-            "Phase 2 trial of moth counts",
-            "Phase II trial of moth counts"
+            "Phase 2 survey of moth counts",
+            "Phase II survey of moth counts"
         ));
         assert!(titles_conflict(
             "Moth counts: 12-month follow-up",

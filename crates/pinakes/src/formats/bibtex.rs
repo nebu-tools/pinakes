@@ -990,10 +990,13 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
     };
     if let Some(u) = take("urldate") {
         r.accessed = bib_date(&u);
+        if r.accessed.is_none() {
+            r.keep(FORMAT, "urldate", &u);
+        }
     }
     let used: Vec<String> = used.into_iter().map(str::to_string).collect();
     for name in order {
-        if used.contains(&name) || (name == "month" && r.issued.is_some()) || name == "day" {
+        if used.contains(&name) {
             continue;
         }
         if let Some(v) = get.get(&name) {

@@ -9,7 +9,7 @@
 
 use crate::diag::Diagnostic;
 use crate::model::{Date, Reference};
-use crate::names::parse_name;
+use crate::names::parse_ris_name;
 use crate::normalise::finish;
 use crate::text::non_empty;
 
@@ -409,11 +409,11 @@ fn to_reference(raw: RawRecord, index: usize, diags: &mut Vec<Diagnostic>) -> Re
             "JA" | "J1" | "J2" => set_once(&mut r.container_title_short, v),
             "ST" => set_once(&mut r.title_short, v),
             "AU" | "A1" => {
-                r.author.push(parse_name(v));
+                r.author.push(parse_ris_name(v));
                 true
             }
             "A2" | "ED" => {
-                r.editor.push(parse_name(v));
+                r.editor.push(parse_ris_name(v));
                 true
             }
             "PY" | "Y1" => {
@@ -664,7 +664,10 @@ pub fn write(refs: &[Reference]) -> String {
             .or(Some(&r.id))
             .filter(|k| !k.is_empty())
         {
-            if r.accession.as_deref() != Some(k.as_str()) || r.citation_key.is_some() {
+            // The AN line carries the accession, or the PMID without one; an ID that repeats it
+            // would read back as a citation key.
+            let an = r.accession.as_deref().or(r.pmid.as_deref());
+            if an != Some(k.as_str()) || r.citation_key.is_some() {
                 push(&mut out, "ID", k);
             }
         }
