@@ -1,0 +1,57 @@
+{
+  "format": "csv",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "id.pmcid-as-pmid",
+      "line": 3,
+      "record": 1,
+      "message": "PMC123 is a PMCID, not a PMID; moved it to the PMCID field"
+    }
+  ],
+  "references": [
+    {
+      "id": "1",
+      "type": "document",
+      "title": "Moths and lamps",
+      "PMID": "30001112",
+      "PMCID": "PMC9001112",
+      "author": [
+        {
+          "family": "Okafor",
+          "given": "D."
+        },
+        {
+          "family": "Lind",
+          "given": "K."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019
+          ]
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "document",
+      "title": "PMCID in the wrong column",
+      "PMCID": "PMC123",
+      "author": [
+        {
+          "family": "Lind",
+          "given": "K."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      }
+    }
+  ]
+}

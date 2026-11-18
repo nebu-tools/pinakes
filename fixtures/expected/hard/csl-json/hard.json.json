@@ -1,0 +1,144 @@
+{
+  "format": "csl-json",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "csl.wrong-type",
+      "line": 34,
+      "record": 3,
+      "message": "Item weird: \"title\" should be a string; kept it unread"
+    },
+    {
+      "severity": "warning",
+      "code": "csl.wrong-type",
+      "line": 34,
+      "record": 3,
+      "message": "Item weird: \"author\" should be a list of names; read it as one name"
+    },
+    {
+      "severity": "warning",
+      "code": "record.no-title",
+      "line": 34,
+      "record": 3,
+      "message": "Record weird has no title"
+    },
+    {
+      "severity": "error",
+      "code": "csl.not-an-object",
+      "line": 40,
+      "record": 4,
+      "message": "Item 5 is not a JSON object; skipped it"
+    }
+  ],
+  "references": [
+    {
+      "id": "17",
+      "type": "article-journal",
+      "title": "The moths of the forest edge",
+      "container-title": "Journal of Nocturnal Ecology",
+      "note": "PMID: 30000999\nPMCID: PMC9000999",
+      "DOI": "10.5555/jne.2020.5",
+      "PMID": "30000999",
+      "PMCID": "PMC9000999",
+      "author": [
+        {
+          "family": "Berg",
+          "given": "Jan",
+          "non-dropping-particle": "van der"
+        },
+        {
+          "family": "Fontaine",
+          "given": "Jean",
+          "dropping-particle": "de la"
+        },
+        {
+          "literal": "Royal Astronomical Society"
+        },
+        {
+          "family": "王",
+          "given": "小明"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020,
+            5
+          ]
+        ]
+      },
+      "x-lab-shelf": "B4",
+      "custom": {
+        "stars": 5
+      }
+    },
+    {
+      "id": "range",
+      "type": "paper-conference",
+      "title": "Glow-worm displays",
+      "page": "e1023",
+      "issued": {
+        "date-parts": [
+          [
+            2021,
+            3,
+            5
+          ],
+          [
+            2021,
+            3,
+            7
+          ]
+        ]
+      },
+      "accessed": {
+        "date-parts": [
+          [
+            2026,
+            11,
+            2
+          ]
+        ],
+        "raw": "2026-11-02"
+      },
+      "event-date": {
+        "season": 1,
+        "date-parts": [
+          [
+            2021
+          ]
+        ]
+      }
+    },
+    {
+      "id": "circa",
+      "type": "manuscript",
+      "title": "An undated broadside",
+      "issued": {
+        "date-parts": [
+          [
+            1890
+          ]
+        ],
+        "circa": true,
+        "raw": "about 1890"
+      }
+    },
+    {
+      "id": "weird",
+      "type": "a-type-nobody-defines",
+      "author": [
+        {
+          "family": "list",
+          "given": "not",
+          "non-dropping-particle": "a"
+        }
+      ],
+      "title": [
+        "not",
+        "a",
+        "string"
+      ]
+    }
+  ]
+}

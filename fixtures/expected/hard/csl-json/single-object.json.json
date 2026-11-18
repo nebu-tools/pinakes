@@ -1,0 +1,11 @@
+{
+  "format": "csl-json",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "one",
+      "type": "book",
+      "title": "A single item, not a list"
+    }
+  ]
+}

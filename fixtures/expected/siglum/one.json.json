@@ -1,0 +1,19 @@
+{
+  "format": "csl-json",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "csl.no-type",
+      "line": 1,
+      "record": 0,
+      "message": "Item a has no type; wrote it as \"document\""
+    }
+  ],
+  "references": [
+    {
+      "id": "a",
+      "type": "document",
+      "title": "T"
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "format": "ris",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "ris.missing-er",
+      "line": 1,
+      "record": 0,
+      "message": "Record starting on line 1 has no ER at the end of the input; kept it"
+    }
+  ],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "x"
+    }
+  ]
+}

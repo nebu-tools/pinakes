@@ -1,0 +1,167 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "30001205",
+      "type": "article-journal",
+      "title": "Comet Tails Observed from Dark-Sky Reserves in the Northern Hemisphere",
+      "container-title": "The Journal of amateur astronomy",
+      "abstract": "BACKGROUND: Comet tails are faint and easily lost to skyglow. METHODS: Observers at twelve reserves photographed three comets on the same nights. RESULTS: Tails were traced twice as far from the darkest reserves.",
+      "DOI": "10.5555/astro.2214131",
+      "PMID": "30001205",
+      "author": [
+        {
+          "family": "Tolland",
+          "given": "Nadia C."
+        },
+        {
+          "family": "Okwu",
+          "given": "Mirela"
+        },
+        {
+          "family": "Hasko",
+          "given": "Selma J."
+        },
+        {
+          "family": "Dravik",
+          "given": "Freda"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2023
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "30001205"
+      }
+    },
+    {
+      "id": "30001202",
+      "type": "article-journal",
+      "title": "Sky brightness before and after the conversion of a city's streetlights to LEDs (SKYGLOW): a multicentre, before-after, controlled survey",
+      "container-title": "The Telescope. Letters",
+      "abstract": "BACKGROUND: Many cities have replaced sodium streetlights with LEDs. METHODS: Sky brightness was measured at forty sites before and after conversion, with twenty sites in an unconverted city as controls.",
+      "DOI": "10.5555/s0035-8711(19)30817-4",
+      "PMID": "30001202",
+      "author": [
+        {
+          "family": "Jarrow",
+          "given": "Rhian H."
+        },
+        {
+          "family": "Corrin",
+          "given": "Alba"
+        },
+        {
+          "family": "Calloway",
+          "given": "Mira"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "30001202"
+      }
+    },
+    {
+      "id": "30001204",
+      "type": "article-journal",
+      "title": "Sky brightness before and after the conversion of a city's streetlights to LEDs (SKYGLOW): five-year follow-up and spectral analysis of a before-after, controlled survey",
+      "container-title": "The Telescope. Letters",
+      "abstract": "BACKGROUND: We report five further years of measurements from the SKYGLOW survey. METHODS: The forty sites were measured each winter.",
+      "DOI": "10.5555/s0035-8711(22)00284-4",
+      "PMID": "30001204",
+      "author": [
+        {
+          "family": "Hasko",
+          "given": "Selma J."
+        },
+        {
+          "family": "Corrin",
+          "given": "Alba"
+        },
+        {
+          "family": "Calloway",
+          "given": "Mira"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2022
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "30001204"
+      }
+    },
+    {
+      "id": "30001201",
+      "type": "article-journal",
+      "title": "Meteor Counts Under Amber Versus White Streetlights As a First Test of Spectral Tuning: The AMBER Survey",
+      "container-title": "Journal of amateur astronomy",
+      "abstract": "PURPOSE: To compare meteor counts under amber and white streetlights. METHODS: Observers counted Perseids from paired sites.",
+      "DOI": "10.5555/jaa.19.00368",
+      "PMID": "30001201",
+      "author": [
+        {
+          "family": "Sallis",
+          "given": "Pia"
+        },
+        {
+          "family": "Achterberg",
+          "given": "Jolie"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "30001201"
+      }
+    },
+    {
+      "id": "30001203",
+      "type": "article-journal",
+      "title": "Variable Stars Observed Through Urban Skyglow, Alone or in Combination with Narrowband Filters",
+      "container-title": "Variable star research",
+      "abstract": "PURPOSE: To report how many variable stars urban observers could follow with and without narrowband filters.",
+      "DOI": "10.5555/1078-0433.var-19-3953",
+      "PMID": "30001203",
+      "author": [
+        {
+          "family": "Stavros",
+          "given": "Lotte M."
+        },
+        {
+          "family": "Takeshita",
+          "given": "Kaito"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "30001203"
+      }
+    }
+  ]
+}

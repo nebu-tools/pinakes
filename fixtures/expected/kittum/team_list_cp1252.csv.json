@@ -1,0 +1,32 @@
+{
+  "format": "csv",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "text.windows-1252",
+      "line": 2,
+      "record": null,
+      "message": "Text is not UTF-8; read it as Windows-1252 (Latin-1)"
+    }
+  ],
+  "references": [
+    {
+      "id": "1",
+      "type": "document",
+      "title": "Nachtfalter an Straßenlaternen in München",
+      "author": [
+        {
+          "family": "Müller",
+          "given": "K."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019
+          ]
+        ]
+      }
+    }
+  ]
+}

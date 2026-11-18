@@ -1,0 +1,42 @@
+{
+  "format": "ris",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "ris.stray-er",
+      "line": 7,
+      "record": null,
+      "message": "ER with no record open; ignored it"
+    },
+    {
+      "severity": "error",
+      "code": "ris.stray-text",
+      "line": 1,
+      "record": null,
+      "message": "Text outside any record was not read: \"Some text an email client put above the export.\""
+    },
+    {
+      "severity": "error",
+      "code": "ris.stray-text",
+      "line": 6,
+      "record": null,
+      "message": "Text outside any record was not read: \"this line belongs to nothing\""
+    }
+  ],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "A record among garbage",
+      "custom": {
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "ZZ",
+            "value": "a tag nobody defines"
+          }
+        ]
+      }
+    }
+  ]
+}

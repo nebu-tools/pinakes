@@ -1,0 +1,41 @@
+[
+  {
+    "id": 17,
+    "type": "article-journal",
+    "title": "The moths of the forest edge",
+    "author": [
+      {"family": "Berg", "given": "Jan", "non-dropping-particle": "van der"},
+      {"family": "Fontaine", "given": "Jean", "dropping-particle": "de la"},
+      {"literal": "Royal Astronomical Society"},
+      {"family": "王", "given": "小明"}
+    ],
+    "issued": {"date-parts": [["2020", "5"]]},
+    "container-title": "Journal of Nocturnal Ecology",
+    "DOI": "https://doi.org/10.5555/JNE.2020.5",
+    "note": "PMID: 30000999\nPMCID: PMC9000999",
+    "custom": {"stars": 5},
+    "x-lab-shelf": "B4"
+  },
+  {
+    "id": "range",
+    "type": "paper-conference",
+    "title": "Glow-worm displays",
+    "issued": {"date-parts": [[2021, 3, 5], [2021, 3, 7]]},
+    "accessed": {"raw": "2026-11-02"},
+    "event-date": {"season": 1, "date-parts": [[2021]]},
+    "page": "e1023"
+  },
+  {
+    "id": "circa",
+    "type": "manuscript",
+    "title": "An undated broadside",
+    "issued": {"literal": "about 1890", "circa": true}
+  },
+  {
+    "id": "weird",
+    "type": "a-type-nobody-defines",
+    "title": ["not", "a", "string"],
+    "author": "not a list"
+  },
+  42
+]

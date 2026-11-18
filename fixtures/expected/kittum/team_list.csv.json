@@ -1,0 +1,114 @@
+{
+  "format": "csv",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "Streetlight-Moth Interactions in Meadows Bordering Rural Roads Lit Since the 1970s",
+      "container-title": "J Noct Ecol",
+      "note": "from the field notebook",
+      "DOI": "10.5555/ecola.1409547",
+      "author": [
+        {
+          "family": "Halvorsen",
+          "given": "C. E."
+        },
+        {
+          "family": "Ebdon",
+          "given": "J. S."
+        },
+        {
+          "family": "Rasmussen",
+          "given": "B. W."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "csv",
+            "name": "Nr",
+            "value": "1"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "article-journal",
+      "title": "Moth counts beneath amber and white streetlights in gardens aged 6-11 years since planting",
+      "container-title": "Am J Noct Crepusc Ecol",
+      "PMID": "30000303",
+      "author": [
+        {
+          "family": "Marlowe",
+          "given": "C. E."
+        },
+        {
+          "family": "Rautio",
+          "given": "F."
+        },
+        {
+          "family": "Mahadevan",
+          "given": "G."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "csv",
+            "name": "Nr",
+            "value": "2"
+          }
+        ]
+      }
+    },
+    {
+      "id": "3",
+      "type": "article-journal",
+      "title": "Streetlight-moth interactions in adult meadows: real-world counts in a national survey",
+      "container-title": "Eur J Ecol",
+      "note": "national survey",
+      "author": [
+        {
+          "family": "Bramwell",
+          "given": "P. R."
+        },
+        {
+          "family": "Durand",
+          "given": "I."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "csv",
+            "name": "Nr",
+            "value": "3"
+          }
+        ]
+      }
+    }
+  ]
+}

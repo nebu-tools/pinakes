@@ -1,0 +1,50 @@
+{
+  "format": "bibtex",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "mueller2020",
+      "type": "article-journal",
+      "citation-key": "mueller2020",
+      "title": "Moth counts under LED lamps",
+      "container-title": "J Noct Ecol",
+      "volume": "382",
+      "issue": "4",
+      "page": "301-310",
+      "DOI": "10.5555/jne.1",
+      "author": [
+        {
+          "family": "Müller",
+          "given": "Anna"
+        },
+        {
+          "family": "Smith",
+          "given": "John"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020,
+            5
+          ]
+        ]
+      }
+    },
+    {
+      "id": "survey",
+      "type": "report",
+      "citation-key": "survey",
+      "title": "Field survey report",
+      "publisher": "Northwind Field Station",
+      "number": "XY-123",
+      "issued": {
+        "date-parts": [
+          [
+            2023
+          ]
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "format": "csl-json",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "csl.bad-json",
+      "line": 4,
+      "record": null,
+      "message": "Not valid JSON: expected `,` or `}` at line 4 column 1"
+    }
+  ],
+  "references": []
+}

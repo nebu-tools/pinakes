@@ -1,0 +1,141 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "2002345601",
+      "type": "article-journal",
+      "title": "Bat activity under dimmed versus full streetlights: a randomised field experiment",
+      "container-title": "Chiroptera Research",
+      "abstract": "A randomised field experiment dimming 412 lamp posts, with bat passes recorded by acoustic detectors.",
+      "note": "Survey number: S-01234561",
+      "URL": "https://www.embase.com/records/2002345601",
+      "DOI": "10.1000/bat.2019.001",
+      "author": [
+        {
+          "family": "Hartmann",
+          "given": "L."
+        },
+        {
+          "family": "Okafor",
+          "given": "D."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "2002345601"
+      }
+    },
+    {
+      "id": "2002345602",
+      "type": "article-journal",
+      "title": "Hedgerow lighting and bat commuting routes: a randomized trial",
+      "container-title": "J Hedgerow Ecol",
+      "abstract": "Hedgerow sections were lit or left dark and commuting bats were counted.",
+      "URL": "https://www.embase.com/records/2002345602",
+      "DOI": "10.1000/bat.2017.014",
+      "author": [
+        {
+          "family": "Brennan",
+          "given": "S."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "2002345602"
+      }
+    },
+    {
+      "id": "2002345603",
+      "type": "article-journal",
+      "title": "Bat activity after streetlight dimming: 24-month follow-up of a randomised field experiment",
+      "container-title": "Chiroptera Research",
+      "abstract": "METHODS: We kept recording at the 412 lamp posts that had been dimmed or left at full power (S-01234561). RESULTS: Bat passes at 24 months were still higher at the dimmed posts.",
+      "note": "Survey number: S-01234561",
+      "URL": "https://www.embase.com/records/2002345603",
+      "DOI": "10.1000/bat.2021.090",
+      "author": [
+        {
+          "family": "Hartmann",
+          "given": "L."
+        },
+        {
+          "family": "Weiss",
+          "given": "P."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "2002345603"
+      }
+    },
+    {
+      "id": "2002345604",
+      "type": "article-journal",
+      "title": "Lamp height and bat foraging over rivers: a randomised experiment along a canal",
+      "container-title": "Scandinavian Freshwater Ecology",
+      "abstract": "METHODS: In this randomised experiment, 247 canal-side lamps were raised or lowered for 6 months.",
+      "URL": "https://www.embase.com/records/2002345604",
+      "DOI": "10.1000/bat.2015.077",
+      "author": [
+        {
+          "family": "Lindqvist",
+          "given": "Anna"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "2002345604"
+      }
+    },
+    {
+      "id": "2002345605",
+      "type": "article-journal",
+      "title": "Acoustic lures for bat surveys: a 12-week randomised controlled experiment",
+      "container-title": "European Bat Surveys",
+      "abstract": "METHODS: We randomised 320 survey points to acoustic lures or silent dummies for 12 weeks.",
+      "URL": "https://www.embase.com/records/2002345605",
+      "DOI": "10.1000/bat.2022.018",
+      "author": [
+        {
+          "family": "Moreau",
+          "given": "Claire"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2022
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "2002345605"
+      }
+    }
+  ]
+}

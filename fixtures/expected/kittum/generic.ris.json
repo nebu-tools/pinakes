@@ -1,0 +1,31 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "SR-2022-01",
+      "type": "article-journal",
+      "title": "Generic Review of Light Pollution Surveys",
+      "container-title": "Field Methods Today",
+      "abstract": "A comprehensive review covering surveys S-1807897 and S-2544451.",
+      "DOI": "10.1000/182",
+      "author": [
+        {
+          "family": "Miller",
+          "given": "Alice"
+        },
+        {
+          "family": "Baker",
+          "given": "Bob"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2022
+          ]
+        ]
+      }
+    }
+  ]
+}

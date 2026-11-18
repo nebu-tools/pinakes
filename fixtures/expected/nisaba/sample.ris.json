@@ -1,0 +1,47 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "A reference study on collaborative research",
+      "container-title": "Journal of Field Ecology",
+      "DOI": "10.0000/example",
+      "author": [
+        {
+          "family": "Mustermann",
+          "given": "Anna"
+        },
+        {
+          "family": "Beispiel",
+          "given": "Bernd"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2023
+          ]
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "book",
+      "title": "Methodik der Feldbeobachtung",
+      "author": [
+        {
+          "family": "Gabler"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021
+          ]
+        ]
+      }
+    }
+  ]
+}

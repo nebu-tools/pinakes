@@ -1,0 +1,32 @@
+{
+  "format": "ris",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "text.windows-1252",
+      "line": 2,
+      "record": null,
+      "message": "Text is not UTF-8; read it as Windows-1252 (Latin-1)"
+    }
+  ],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "Über Nachtfalter – eine Übersicht",
+      "author": [
+        {
+          "family": "Müller",
+          "given": "Jürgen"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2001
+          ]
+        ]
+      }
+    }
+  ]
+}

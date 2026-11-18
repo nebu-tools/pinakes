@@ -1,0 +1,72 @@
+{
+  "format": "ris",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "text.bom",
+      "line": null,
+      "record": null,
+      "message": "Removed a UTF-8 byte-order mark"
+    }
+  ],
+  "references": [
+    {
+      "id": "Okafor2019",
+      "type": "article-journal",
+      "title": "The moths of the forest edge",
+      "container-title": "Journal of Nocturnal Ecology",
+      "volume": "7",
+      "issue": "1",
+      "page": "1-10",
+      "URL": "https://example.org/moths",
+      "DOI": "10.5555/jne.2019.1",
+      "ISSN": "1234-5679",
+      "author": [
+        {
+          "family": "Okafor",
+          "given": "Daniel"
+        },
+        {
+          "family": "Lind",
+          "given": "Karin"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "UR",
+            "value": "http://example.org/moths-mirror"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "thesis",
+      "title": "Moths in the city",
+      "publisher": "Example University",
+      "genre": "PhD thesis",
+      "author": [
+        {
+          "family": "Lind",
+          "given": "Karin"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2018
+          ]
+        ]
+      }
+    }
+  ]
+}

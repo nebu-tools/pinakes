@@ -1,0 +1,284 @@
+{
+  "format": "medline",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "30000101",
+      "type": "article-journal",
+      "title": "Streetlight-Moth Interactions in Meadows Bordering Rural Roads Lit Since the 1970s.",
+      "container-title": "Journal of nocturnal ecology",
+      "container-title-short": "J Noct Ecol",
+      "volume": "373",
+      "issue": "3",
+      "page": "220-31",
+      "abstract": "BACKGROUND: Moths are among the most important pollinators of meadow plants at night, and artificial light draws them away from flowers. METHODS: We conducted two paired, replicated, observer-blind, field surveys (LANTERN and BEACON) that were designed to assess the effects of streetlights in combination with road traffic on moths in meadows 12 metres or closer to a road that had been lit since the 1970s. CONCLUSIONS: These data show that streetlights in combination with traffic reduced the visits of moths to flowers in meadows bordering the road. (Funded by the Brisbane Field Naturalists and others; LANTERN and BEACON survey numbers, S-01807923 and S-01807949.)",
+      "language": "eng",
+      "DOI": "10.5555/ecola.1409547",
+      "PMID": "30000101",
+      "PMCID": "PMC9000101",
+      "ISSN": "1365-2656",
+      "author": [
+        {
+          "family": "Halvorsen",
+          "given": "Clara E"
+        },
+        {
+          "family": "Ebdon",
+          "given": "J Stuart"
+        },
+        {
+          "family": "Rasmussen",
+          "given": "Bodil W"
+        },
+        {
+          "literal": "LANTERN Survey Group"
+        },
+        {
+          "literal": "BEACON Survey Group"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015,
+            7,
+            16
+          ]
+        ]
+      },
+      "custom": {
+        "publication-type": [
+          "Comparative Study",
+          "Journal Article",
+          "Multicenter Study",
+          "Observational Study",
+          "Research Support, Non-U.S. Gov't"
+        ],
+        "source-fields": [
+          {
+            "format": "medline",
+            "name": "OWN",
+            "value": "NLM"
+          },
+          {
+            "format": "medline",
+            "name": "STAT",
+            "value": "MEDLINE"
+          },
+          {
+            "format": "medline",
+            "name": "DCOM",
+            "value": "20150727"
+          },
+          {
+            "format": "medline",
+            "name": "LR",
+            "value": "20220408"
+          },
+          {
+            "format": "medline",
+            "name": "IS",
+            "value": "0021-8790 (Print)"
+          },
+          {
+            "format": "medline",
+            "name": "IS",
+            "value": "0021-8790 (Linking)"
+          },
+          {
+            "format": "medline",
+            "name": "AD",
+            "value": "From the Institute of Night Ecology, Brisbane, QLD, Australia."
+          },
+          {
+            "format": "medline",
+            "name": "SI",
+            "value": "GENBANK/OQ807923"
+          },
+          {
+            "format": "medline",
+            "name": "SI",
+            "value": "GENBANK/OQ807949"
+          },
+          {
+            "format": "medline",
+            "name": "DEP",
+            "value": "20150517"
+          },
+          {
+            "format": "medline",
+            "name": "PL",
+            "value": "United States"
+          },
+          {
+            "format": "medline",
+            "name": "JID",
+            "value": "0255563"
+          },
+          {
+            "format": "medline",
+            "name": "SB",
+            "value": "IM"
+          },
+          {
+            "format": "medline",
+            "name": "MH",
+            "value": "Animals"
+          },
+          {
+            "format": "medline",
+            "name": "MH",
+            "value": "Lighting/adverse effects/*statistics & numerical data"
+          },
+          {
+            "format": "medline",
+            "name": "MH",
+            "value": "Moths/*physiology/genetics"
+          },
+          {
+            "format": "medline",
+            "name": "EDAT",
+            "value": "2015/05/20 06:00"
+          },
+          {
+            "format": "medline",
+            "name": "MHDA",
+            "value": "2015/07/28 06:00"
+          },
+          {
+            "format": "medline",
+            "name": "CRDT",
+            "value": "2015/05/19 06:00"
+          },
+          {
+            "format": "medline",
+            "name": "PHST",
+            "value": "2015/05/19 06:00 [entrez]"
+          },
+          {
+            "format": "medline",
+            "name": "PST",
+            "value": "ppublish"
+          },
+          {
+            "format": "medline",
+            "name": "SO",
+            "value": "J Noct Ecol. 2015 Jul 16;373(3):220-31. doi: 10.5555/EcoLa.1409547. Epub 2015 May 17."
+          }
+        ]
+      }
+    },
+    {
+      "id": "30000202",
+      "type": "article-journal",
+      "title": "Effects of dimmed streetlights on moth activity in suburban gardens aged 6-11 years since planting: a paired, replicated, before-after field experiment.",
+      "container-title": "The Night Sky. Measurement and methods",
+      "container-title-short": "Night Sky Meas",
+      "volume": "5",
+      "issue": "7",
+      "page": "557-567",
+      "abstract": "BACKGROUND: Dimming streetlights at midnight has been adopted by many councils for roads 12 metres or wider with gardens on both sides. METHODS: In this paired, multicentre, replicated, observer-blind, before-after experiment, gardens aged 6-11 years were assigned at random. INTERPRETATION: Dimming raised the number of moths caught in light traps. FUNDING: Suburban Moth Recorders.",
+      "language": "eng",
+      "DOI": "10.5555/s0004-6361(17)30215-1",
+      "PMID": "30000202",
+      "ISSN": "1432-0746",
+      "author": [
+        {
+          "family": "Rautio",
+          "given": "Freya"
+        },
+        {
+          "family": "Hallam",
+          "given": "Clea"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017,
+            7
+          ]
+        ]
+      },
+      "custom": {
+        "publication-type": [
+          "Comparative Study",
+          "Journal Article",
+          "Observational Study"
+        ],
+        "source-fields": [
+          {
+            "format": "medline",
+            "name": "OWN",
+            "value": "NLM"
+          },
+          {
+            "format": "medline",
+            "name": "STAT",
+            "value": "MEDLINE"
+          },
+          {
+            "format": "medline",
+            "name": "DCOM",
+            "value": "20180126"
+          },
+          {
+            "format": "medline",
+            "name": "LR",
+            "value": "20181202"
+          },
+          {
+            "format": "medline",
+            "name": "IS",
+            "value": "0004-6361 (Linking)"
+          },
+          {
+            "format": "medline",
+            "name": "LID",
+            "value": "S0004-6361(17)30215-1 [pii]"
+          },
+          {
+            "format": "medline",
+            "name": "SI",
+            "value": "GENBANK/OQ514473"
+          },
+          {
+            "format": "medline",
+            "name": "DEP",
+            "value": "20170609"
+          },
+          {
+            "format": "medline",
+            "name": "PL",
+            "value": "England"
+          },
+          {
+            "format": "medline",
+            "name": "JID",
+            "value": "101605555"
+          },
+          {
+            "format": "medline",
+            "name": "EDAT",
+            "value": "2017/06/14 06:00"
+          },
+          {
+            "format": "medline",
+            "name": "AID",
+            "value": "S0004-6361(17)30215-1 [pii]"
+          },
+          {
+            "format": "medline",
+            "name": "PST",
+            "value": "ppublish"
+          },
+          {
+            "format": "medline",
+            "name": "SO",
+            "value": "Night Sky Meas. 2017 Jul;5(7):557-567. doi: 10.5555/S0004-6361(17)30215-1. Epub 2017 Jun 9."
+          }
+        ]
+      }
+    }
+  ]
+}

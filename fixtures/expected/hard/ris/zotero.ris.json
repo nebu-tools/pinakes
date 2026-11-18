@@ -1,0 +1,112 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "Fireflies of the Atlantic forest",
+      "title-short": "Fireflies",
+      "container-title": "Revista de Ecologia",
+      "container-title-short": "Rev Ecol",
+      "volume": "5",
+      "issue": "2",
+      "page": "14-22",
+      "language": "pt",
+      "note": "PMID: 31000777",
+      "URL": "https://example.org/fireflies",
+      "DOI": "10.5555/rev.2020.14",
+      "PMID": "31000777",
+      "PMCID": "PMC9001234",
+      "ISSN": "1234-5679",
+      "keyword": "Lampyridae",
+      "author": [
+        {
+          "family": "Silva",
+          "given": "João"
+        },
+        {
+          "family": "Souza",
+          "given": "Maria"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020,
+            5,
+            14
+          ]
+        ]
+      },
+      "accessed": {
+        "date-parts": [
+          [
+            2024,
+            2,
+            1
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "L1",
+            "value": "files/12/silva2020.pdf"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "book",
+      "title": "Field notes from the observatory",
+      "publisher": "Example Press",
+      "publisher-place": "Boston",
+      "ISBN": "9780306406157",
+      "author": [
+        {
+          "family": "Hale",
+          "given": "Sarah"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            1890
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "DA",
+            "value": "1890"
+          }
+        ]
+      }
+    },
+    {
+      "id": "3",
+      "type": "webpage",
+      "title": "Night sky brightness map",
+      "URL": "https://example.org/map",
+      "author": [
+        {
+          "literal": "Dark Sky Mapping Project"
+        }
+      ],
+      "accessed": {
+        "date-parts": [
+          [
+            2026,
+            11,
+            2
+          ]
+        ]
+      }
+    }
+  ]
+}

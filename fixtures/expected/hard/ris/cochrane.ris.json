@@ -1,0 +1,41 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "CN-01077759",
+      "type": "article-journal",
+      "title": "Streetlight-moth interactions in meadows bordering rural roads",
+      "container-title": "Journal of nocturnal ecology",
+      "volume": "373",
+      "issue": "3",
+      "page": "220-231",
+      "URL": "https://www.cochranelibrary.com/central/doi/10.1002/central/CN-01077759/full",
+      "DOI": "10.5555/ecola.1409547",
+      "keyword": "Animals, Moths [*physiology]",
+      "author": [
+        {
+          "family": "Halvorsen",
+          "given": "C. E."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "CN-01077759",
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "PT",
+            "value": "Journal Article"
+          }
+        ]
+      }
+    }
+  ]
+}

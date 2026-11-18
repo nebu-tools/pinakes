@@ -1,0 +1,91 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "615024109",
+      "type": "article-journal",
+      "title": "Moth abundance and diversity after the dimming of streetlights",
+      "container-title": "Journal of Nocturnal Ecology",
+      "container-title-short": "J. Noct. Ecol.",
+      "volume": "16",
+      "issue": "3",
+      "page": "361-368",
+      "abstract": "Objective: To compare moth counts before and after streetlights were dimmed.",
+      "language": "English",
+      "URL": "http://ovidsp.ovid.com/ovidweb.cgi?T=JS&PAGE=reference&D=emed18&NEWS=N&AN=615024109",
+      "DOI": "10.5555/j.jne.2017.01.008",
+      "ISSN": "1569-1985",
+      "keyword": "*moth, street lighting",
+      "author": [
+        {
+          "family": "Kovar",
+          "given": "M. W."
+        },
+        {
+          "family": "McAvoy",
+          "given": "E. F."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "615024109",
+        "database": "Embase",
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "M3",
+            "value": "Article"
+          }
+        ]
+      }
+    },
+    {
+      "id": "30000101",
+      "type": "article-journal",
+      "title": "Streetlight-moth interactions in meadows",
+      "container-title": "Journal of Nocturnal Ecology",
+      "volume": "373",
+      "issue": "3",
+      "page": "220-31",
+      "PMID": "30000101",
+      "author": [
+        {
+          "family": "Halvorsen",
+          "given": "C. E."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015,
+            7,
+            16
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "30000101",
+        "database": "Ovid MEDLINE(R)",
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "SO",
+            "value": "Journal of Nocturnal Ecology. 373(3):220-31, 2015 Jul 16."
+          },
+          {
+            "format": "ris",
+            "name": "Y1",
+            "value": "2015"
+          }
+        ]
+      }
+    }
+  ]
+}

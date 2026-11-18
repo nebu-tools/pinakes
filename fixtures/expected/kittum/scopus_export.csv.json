@@ -1,0 +1,169 @@
+{
+  "format": "csv",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "text.bom",
+      "line": null,
+      "record": null,
+      "message": "Removed a UTF-8 byte-order mark"
+    }
+  ],
+  "references": [
+    {
+      "id": "2-s2.0-85000000101",
+      "type": "article-journal",
+      "title": "Streetlight-moth interactions in meadows bordering rural roads lit since the 1970s",
+      "container-title": "Journal of Nocturnal Ecology",
+      "container-title-short": "J. Noct. Ecol.",
+      "volume": "373",
+      "issue": "3",
+      "page": "220-231",
+      "abstract": "BACKGROUND: Moths are among the most important pollinators of meadow plants at night. METHODS: We conducted two field surveys (LANTERN and BEACON). © 2015 Society of Night Ecologists.",
+      "language": "English",
+      "URL": "https://www.scopus.com/inward/record.uri?eid=2-s2.0-85000000101&doi=10.5555%2fEcoLa.1409547&partnerID=40&md5=0b5e3a1c",
+      "DOI": "10.5555/ecola.1409547",
+      "PMID": "30000101",
+      "keyword": "animals, lighting, moths",
+      "author": [
+        {
+          "family": "Halvorsen",
+          "given": "Clara E."
+        },
+        {
+          "family": "Ebdon",
+          "given": "J. Stuart"
+        },
+        {
+          "family": "Rasmussen",
+          "given": "Bodil W."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "2-s2.0-85000000101",
+        "database": "Scopus",
+        "publication-type": [
+          "Article"
+        ],
+        "source-fields": [
+          {
+            "format": "csv",
+            "name": "Authors",
+            "value": "Halvorsen C.E.; Ebdon J.S.; Rasmussen B.W."
+          },
+          {
+            "format": "csv",
+            "name": "Author(s) ID",
+            "value": "7006453478; 7004257085; 7102853474"
+          },
+          {
+            "format": "csv",
+            "name": "Page count",
+            "value": "11"
+          },
+          {
+            "format": "csv",
+            "name": "Cited by",
+            "value": "1250"
+          },
+          {
+            "format": "csv",
+            "name": "Publication Stage",
+            "value": "Final"
+          },
+          {
+            "format": "csv",
+            "name": "Open Access",
+            "value": "All Open Access; Green Open Access"
+          },
+          {
+            "format": "csv",
+            "name": "Source",
+            "value": "Scopus"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2-s2.0-85000000404",
+      "type": "article-journal",
+      "title": "Assessment of moth abundance and diversity after long-term dimming of streetlights in meadows bordering rural roads (PROGRESS): a 3-year extension survey",
+      "container-title": "The Night Sky. Measurement and Methods",
+      "container-title-short": "Night Sky Meas.",
+      "volume": "5",
+      "issue": "2",
+      "page": "107-118",
+      "language": "English",
+      "URL": "https://www.scopus.com/inward/record.uri?eid=2-s2.0-85000000404&doi=10.5555%2fS0004-6361%2816%2930427-1&partnerID=40&md5=9f3d2c7a",
+      "DOI": "10.5555/s0004-6361(16)30427-1",
+      "PMID": "30000404",
+      "author": [
+        {
+          "family": "Kovar",
+          "given": "Milos W."
+        },
+        {
+          "family": "McAvoy",
+          "given": "Edda F."
+        },
+        {
+          "family": "Morland",
+          "given": "Runa B."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "2-s2.0-85000000404",
+        "database": "Scopus",
+        "publication-type": [
+          "Article"
+        ],
+        "source-fields": [
+          {
+            "format": "csv",
+            "name": "Authors",
+            "value": "Kovar M.W.; McAvoy E.F.; Morland R.B."
+          },
+          {
+            "format": "csv",
+            "name": "Author(s) ID",
+            "value": "7005302385; 6603626213; 7202081853"
+          },
+          {
+            "format": "csv",
+            "name": "Page count",
+            "value": "11"
+          },
+          {
+            "format": "csv",
+            "name": "Cited by",
+            "value": "380"
+          },
+          {
+            "format": "csv",
+            "name": "Publication Stage",
+            "value": "Final"
+          },
+          {
+            "format": "csv",
+            "name": "Source",
+            "value": "Scopus"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "format": "bibtex",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "names",
+      "type": "book",
+      "citation-key": "names",
+      "title": "Names",
+      "author": [
+        {
+          "family": "Müller",
+          "given": "Anna"
+        },
+        {
+          "family": "Smith",
+          "given": "John B."
+        },
+        {
+          "family": "Berg",
+          "given": "Jan",
+          "non-dropping-particle": "van der"
+        },
+        {
+          "literal": "International Astronomical Society"
+        }
+      ]
+    },
+    {
+      "id": "beethoven",
+      "type": "book",
+      "citation-key": "beethoven",
+      "title": "Sonatas",
+      "author": [
+        {
+          "family": "Beethoven",
+          "given": "Ludwig",
+          "non-dropping-particle": "van"
+        }
+      ]
+    },
+    {
+      "id": "markup",
+      "type": "document",
+      "citation-key": "markup",
+      "title": "été – DNA <i>in vitro</i>",
+      "note": "10 m & more"
+    }
+  ]
+}

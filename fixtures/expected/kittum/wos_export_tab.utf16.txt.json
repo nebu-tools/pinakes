@@ -1,0 +1,183 @@
+{
+  "format": "wos-tab",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "text.utf16",
+      "line": null,
+      "record": null,
+      "message": "Read UTF-16 (little-endian) text"
+    }
+  ],
+  "references": [
+    {
+      "id": "WOS:000500000400016",
+      "type": "article-journal",
+      "title": "Assessment of moth abundance and diversity after long-term dimming of streetlights in meadows bordering rural roads (PROGRESS): a 3-year extension survey",
+      "container-title": "NIGHT SKY MEASUREMENT AND METHODS",
+      "container-title-short": "Night Sky Meas.",
+      "publisher": "NORTHWIND SCI LTD",
+      "volume": "5",
+      "issue": "2",
+      "page": "107-118",
+      "abstract": "Background In two earlier surveys (LANTERN and BEACON), dimming streetlights raised moth counts. Methods PROGRESS (S-01931839) was a 3-year, parallel-group, multicentre extension survey.",
+      "language": "English",
+      "DOI": "10.5555/s0004-6361(16)30427-1",
+      "PMID": "30000404",
+      "ISSN": "0004-6361",
+      "author": [
+        {
+          "family": "Kovar",
+          "given": "Milos W."
+        },
+        {
+          "family": "McAvoy",
+          "given": "Edda F."
+        },
+        {
+          "family": "Morland",
+          "given": "Runa B."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017,
+            2
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "WOS:000500000400016",
+        "database": "Web of Science",
+        "publication-type": [
+          "Article"
+        ],
+        "source-fields": [
+          {
+            "format": "wos",
+            "name": "J9",
+            "value": "NIGHT SKY MEAS"
+          },
+          {
+            "format": "wos",
+            "name": "PG",
+            "value": "12"
+          },
+          {
+            "format": "wos",
+            "name": "WC",
+            "value": "Ecology"
+          },
+          {
+            "format": "wos",
+            "name": "DA",
+            "value": "2024-05-10"
+          },
+          {
+            "format": "wos",
+            "name": "AU",
+            "value": "Kovar, MW\nMcAvoy, EF\nMorland, RB"
+          },
+          {
+            "format": "wos",
+            "name": "EI",
+            "value": "1432-0746"
+          },
+          {
+            "format": "wos",
+            "name": "PD",
+            "value": "FEB"
+          },
+          {
+            "format": "wos",
+            "name": "PT",
+            "value": "J"
+          }
+        ]
+      }
+    },
+    {
+      "id": "WOS:000500000800022",
+      "type": "paper-conference",
+      "title": "Light spectra, moth behaviour and bat foraging in gardens aged 2-5 years since planting: an unblinded field study",
+      "container-title": "NIGHT SKY MEASUREMENT AND METHODS",
+      "publisher": "NORTHWIND SCI LTD",
+      "volume": "7",
+      "issue": "4",
+      "page": "325-335",
+      "abstract": "Background Amber streetlights are used in gardens 6 years and older. Methods In this unblinded field study (S-02797132), gardens aged 2-5 years were lit with amber or white lamps.",
+      "language": "English",
+      "DOI": "10.5555/s0004-6361(18)30460-0",
+      "PMID": "30000505",
+      "ISSN": "0004-6361",
+      "author": [
+        {
+          "family": "McInnes",
+          "given": "Jonas J."
+        },
+        {
+          "family": "McBride",
+          "given": "Saskia A."
+        },
+        {
+          "family": "Mahadevan",
+          "given": "Gita"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019,
+            4
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "WOS:000500000800022",
+        "database": "Web of Science",
+        "publication-type": [
+          "Article",
+          "Proceedings Paper"
+        ],
+        "source-fields": [
+          {
+            "format": "wos",
+            "name": "J9",
+            "value": "NIGHT SKY MEAS"
+          },
+          {
+            "format": "wos",
+            "name": "PG",
+            "value": "11"
+          },
+          {
+            "format": "wos",
+            "name": "WC",
+            "value": "Ecology"
+          },
+          {
+            "format": "wos",
+            "name": "DA",
+            "value": "2024-05-10"
+          },
+          {
+            "format": "wos",
+            "name": "AU",
+            "value": "McInnes, JJ\nMcBride, SA\nMahadevan, G"
+          },
+          {
+            "format": "wos",
+            "name": "PD",
+            "value": "APR"
+          },
+          {
+            "format": "wos",
+            "name": "PT",
+            "value": "J"
+          }
+        ]
+      }
+    }
+  ]
+}

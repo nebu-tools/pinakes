@@ -1,0 +1,55 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "WOS:000500000100007",
+      "type": "article-journal",
+      "title": "Streetlight-Moth Interactions in Meadows Bordering Rural Roads Lit Since the 1970s",
+      "container-title": "JOURNAL OF NOCTURNAL ECOLOGY",
+      "container-title-short": "J. Noct. Ecol.",
+      "volume": "373",
+      "issue": "3",
+      "page": "220-231",
+      "DOI": "10.5555/ecola.1409547",
+      "ISSN": "0021-8790",
+      "author": [
+        {
+          "family": "Halvorsen",
+          "given": "C. E."
+        },
+        {
+          "family": "Ebdon",
+          "given": "J. S."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "WOS:000500000100007",
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "J9",
+            "value": "J NOCT ECOL"
+          },
+          {
+            "format": "ris",
+            "name": "EI",
+            "value": "1365-2656"
+          },
+          {
+            "format": "ris",
+            "name": "DA",
+            "value": ""
+          }
+        ]
+      }
+    }
+  ]
+}

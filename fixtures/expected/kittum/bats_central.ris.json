@@ -1,0 +1,140 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "CN-BAT-001",
+      "type": "article-journal",
+      "title": "Bat activity under dimmed versus full streetlights: a randomised field experiment",
+      "container-title": "Chiroptera Research",
+      "abstract": "BACKGROUND: Streetlights change where bats forage, but field experiments remain few. METHODS: In this randomised field experiment, 412 lamp posts were dimmed or left at full power and bat passes were recorded with acoustic detectors for one summer.",
+      "DOI": "10.1000/bat.2019.001",
+      "author": [
+        {
+          "family": "Hartmann",
+          "given": "Lena"
+        },
+        {
+          "family": "Okafor",
+          "given": "Daniel"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019
+          ]
+        ]
+      }
+    },
+    {
+      "id": "CN-BAT-002",
+      "type": "article-journal",
+      "title": "Hedgerow lighting and bat commuting routes: a randomized trial",
+      "container-title": "Journal of Hedgerow Ecology",
+      "abstract": "BACKGROUND: Hedgerows guide bats between roosts and feeding grounds. METHODS: We lit 280 hedgerow sections or left them dark and counted commuting bats at dusk.",
+      "DOI": "10.1000/bat.2017.014",
+      "author": [
+        {
+          "family": "Brennan",
+          "given": "Siobhan"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017
+          ]
+        ]
+      }
+    },
+    {
+      "id": "CN-BAT-003",
+      "type": "article-journal",
+      "title": "Amber plus motion-sensing lamps versus amber lamps alone: a randomised field experiment",
+      "container-title": "Lighting and Wildlife",
+      "abstract": "METHODS: This randomised experiment fitted 600 lamp posts with amber lamps, half of them with motion sensors, for 12 weeks.",
+      "DOI": "10.1000/bat.2021.033",
+      "author": [
+        {
+          "family": "Ivanova",
+          "given": "Maria"
+        },
+        {
+          "family": "Lund",
+          "given": "Erik"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021
+          ]
+        ]
+      }
+    },
+    {
+      "id": "CN-BAT-004",
+      "type": "article-journal",
+      "title": "Moth flight at lit and unlit field margins: a randomised, controlled experiment",
+      "container-title": "Field Margin Studies",
+      "abstract": "METHODS: We fitted 64 field margins with lamps or dummy lamps for six weeks and counted moths in light traps.",
+      "DOI": "10.1000/moth.2016.207",
+      "author": [
+        {
+          "family": "Pereira",
+          "given": "Joana"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2016
+          ]
+        ]
+      }
+    },
+    {
+      "id": "CN-BAT-005",
+      "type": "article-journal",
+      "title": "Red versus white lighting for bat roosts in churches: a randomized trial",
+      "container-title": "Heritage Ecology",
+      "abstract": "METHODS: In this randomized trial, 525 church roosts were lit with red or white floodlights for 12 weeks.",
+      "DOI": "10.1000/roost.2018.551",
+      "author": [
+        {
+          "family": "Novak",
+          "given": "Tomas"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2018
+          ]
+        ]
+      }
+    },
+    {
+      "id": "CN-BAT-006",
+      "type": "article-journal",
+      "title": "Garden lighting and bat sightings in the general population: a prospective survey",
+      "container-title": "Citizen Science Studies",
+      "abstract": "METHODS: We followed 3,214 households who recorded their garden lighting and the bats they saw each evening.",
+      "DOI": "10.1000/pop.2020.090",
+      "author": [
+        {
+          "family": "Clarke",
+          "given": "Hannah"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      }
+    }
+  ]
+}

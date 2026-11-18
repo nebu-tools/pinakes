@@ -1,0 +1,222 @@
+{
+  "format": "pubmed-xml",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "30000606",
+      "type": "article-journal",
+      "title": "Validation of the MothCount-Score.kid<sup>Ⓒ</sup>, a novel garden survey for <i>Lepidoptera</i> counted by schoolchildren.",
+      "container-title": "Journal of nocturnal ecology : official journal of the Society of Night Ecologists",
+      "container-title-short": "J Noct Ecol",
+      "volume": "24",
+      "issue": "5",
+      "page": "886-893",
+      "abstract": "BACKGROUND AND OBJECTIVE: Garden surveys by children are cheap but rarely checked against light traps.\n\nMETHODS: Forty schools counted moths at dusk; a recorder ran a light trap in the same gardens. CO<sub>2</sub> traps were used as a check.\n\nRESULTS: Counts agreed (r = 0.81) & held across seasons.\n\nCONCLUSIONS: The score is fit for citizen science.",
+      "language": "eng",
+      "DOI": "10.5555/j.jne.2025.07.010",
+      "PMID": "30000606",
+      "PMCID": "PMC9000606",
+      "ISSN": "1873-5037",
+      "keyword": "Citizen science, Light trap",
+      "author": [
+        {
+          "family": "Jäger",
+          "given": "Lena"
+        },
+        {
+          "family": "Ó Briain",
+          "given": "Seán"
+        },
+        {
+          "family": "de la Cruz",
+          "given": "Marta"
+        },
+        {
+          "literal": "Schools Moth Network"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2025,
+            9
+          ]
+        ]
+      },
+      "custom": {
+        "publication-type": [
+          "Journal Article",
+          "Evaluation Study"
+        ],
+        "source-fields": [
+          {
+            "format": "pubmed-xml",
+            "name": "ArticleDate",
+            "value": "2025-07-22"
+          },
+          {
+            "format": "pubmed-xml",
+            "name": "ELocationID/pii",
+            "value": "S1569-1985(25)01534-6"
+          },
+          {
+            "format": "pubmed-xml",
+            "name": "DataBank/GENBANK",
+            "value": "OQ968612"
+          },
+          {
+            "format": "pubmed-xml",
+            "name": "Country",
+            "value": "Netherlands"
+          },
+          {
+            "format": "pubmed-xml",
+            "name": "MeshHeading",
+            "value": "Animals"
+          },
+          {
+            "format": "pubmed-xml",
+            "name": "MeshHeading",
+            "value": "Moths"
+          },
+          {
+            "format": "pubmed-xml",
+            "name": "ArticleId/pii",
+            "value": "S1569-1985(25)01534-6"
+          }
+        ]
+      }
+    },
+    {
+      "id": "30000707",
+      "type": "article-journal",
+      "title": "[Light pollution over the Alps: a survey of observatories].",
+      "container-title": "The Astronomer",
+      "container-title-short": "Astron",
+      "volume": "12",
+      "issue": "Suppl 2",
+      "page": "e1023",
+      "abstract": "Thirty-one observatories reported sky brightness.\n\nMost found the sky brighter each decade.",
+      "language": "ger",
+      "PMID": "30000707",
+      "ISSN": "0004-637X",
+      "author": [
+        {
+          "family": "Müller",
+          "given": "Karl-Heinz"
+        },
+        {
+          "family": "Ruiz",
+          "given": "Ana",
+          "suffix": "Jr"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021
+          ]
+        ],
+        "raw": "2021 Winter-Spring"
+      },
+      "custom": {
+        "publication-type": [
+          "Journal Article",
+          "Review"
+        ],
+        "source-fields": [
+          {
+            "format": "pubmed-xml",
+            "name": "VernacularTitle",
+            "value": "Lichtverschmutzung über den Alpen: eine Umfrage unter Sternwarten."
+          }
+        ]
+      }
+    },
+    {
+      "id": "30000808",
+      "type": "article-journal",
+      "title": "Glow-worm <b>displays</b> fade near lit paths",
+      "container-title": "Ecology letters (online)",
+      "container-title-short": "Ecol Lett Online",
+      "volume": "14",
+      "abstract": "Female glow-worms (<i>Lampyris noctiluca</i>) glowed less often within 20 m of a lit path.",
+      "language": "eng",
+      "DOI": "10.5555/elife.88001",
+      "PMID": "30000808",
+      "PMCID": "PMC9000808",
+      "ISSN": "1461-0248",
+      "author": [
+        {
+          "family": "Ngata",
+          "given": "Aroha"
+        },
+        {
+          "family": "王",
+          "given": "小明"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2024
+          ]
+        ],
+        "raw": "2024 Spring"
+      },
+      "custom": {
+        "publication-type": [
+          "Journal Article",
+          "Preprint"
+        ],
+        "source-fields": [
+          {
+            "format": "pubmed-xml",
+            "name": "ArticleId/doi",
+            "value": "10.5555/ecolett.88001"
+          }
+        ]
+      }
+    },
+    {
+      "id": "30000909",
+      "type": "chapter",
+      "title": "Moths",
+      "container-title": "Field Guide to Night Life",
+      "publisher": "Northwind Press",
+      "publisher-place": "Oxford",
+      "edition": "2nd",
+      "abstract": "How to find and name the common moths.",
+      "PMID": "30000909",
+      "ISBN": "9780306406157",
+      "author": [
+        {
+          "family": "Ferrand",
+          "given": "Paul"
+        }
+      ],
+      "editor": [
+        {
+          "family": "Okonkwo",
+          "given": "Ada"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "pubmed-xml",
+            "name": "ArticleId/bookaccession",
+            "value": "NBK50001"
+          }
+        ]
+      }
+    }
+  ]
+}

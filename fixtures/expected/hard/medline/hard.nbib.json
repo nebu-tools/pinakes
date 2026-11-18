@@ -1,0 +1,179 @@
+{
+  "format": "medline",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "medline.bad-line",
+      "line": 35,
+      "record": null,
+      "message": "A line is neither a field nor an indented continuation; read it as a continuation"
+    }
+  ],
+  "references": [
+    {
+      "id": "30001111",
+      "type": "article-journal",
+      "title": "[Night moths in Bavarian forests].",
+      "container-title": "Bayerische Waldberichte",
+      "container-title-short": "Bay Waldber",
+      "page": "e1023",
+      "language": "ger",
+      "DOI": "10.5555/bav.2021.1",
+      "PMID": "30001111",
+      "author": [
+        {
+          "family": "Müller",
+          "given": "Karl-Heinz"
+        },
+        {
+          "family": "Berg",
+          "given": "Jan",
+          "non-dropping-particle": "van der"
+        },
+        {
+          "literal": "Bavarian Moth Recorders"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021
+          ]
+        ],
+        "raw": "2021 Winter"
+      },
+      "custom": {
+        "publication-type": [
+          "Journal Article",
+          "English Abstract"
+        ],
+        "source-fields": [
+          {
+            "format": "medline",
+            "name": "OWN",
+            "value": "NLM"
+          },
+          {
+            "format": "medline",
+            "name": "TT",
+            "value": "Nachtfalter in bayerischen Wäldern."
+          },
+          {
+            "format": "medline",
+            "name": "LID",
+            "value": "S0000-0000(21)00001-1 [pii]"
+          },
+          {
+            "format": "medline",
+            "name": "AID",
+            "value": "S0000-0000(21)00001-1 [pii]"
+          },
+          {
+            "format": "medline",
+            "name": "SO",
+            "value": "Bay Waldber. 2021 Winter;12:e1023."
+          }
+        ]
+      }
+    },
+    {
+      "id": "30001112",
+      "type": "article-journal",
+      "title": "Moths and lamps.",
+      "container-title": "Journal of nocturnal ecology",
+      "page": "101-9",
+      "PMID": "30001112",
+      "ISSN": "1234-5679",
+      "author": [
+        {
+          "family": "Okafor",
+          "given": "D."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020,
+            3
+          ],
+          [
+            2020,
+            4
+          ]
+        ]
+      },
+      "custom": {
+        "publication-type": [
+          "Journal Article",
+          "Retracted Publication"
+        ]
+      }
+    },
+    {
+      "id": "30001113",
+      "type": "article-journal",
+      "title": "A record with a line that is not a field this line is not a field",
+      "PMID": "30001113",
+      "author": [
+        {
+          "family": "Lind",
+          "given": "K."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019,
+            12,
+            25
+          ],
+          [
+            2019,
+            12,
+            31
+          ]
+        ]
+      }
+    },
+    {
+      "id": "30001114",
+      "type": "chapter",
+      "title": "Glow-worms of the Atlantic forest: a chapter.",
+      "container-title": "Field Guide to Night Life",
+      "publisher": "Northwind Press",
+      "publisher-place": "Oxford",
+      "PMID": "30001114",
+      "ISBN": "9780306406157",
+      "editor": [
+        {
+          "family": "Okonkwo",
+          "given": "Ada"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2024
+          ]
+        ]
+      },
+      "custom": {
+        "publication-type": [
+          "Book Chapter"
+        ],
+        "source-fields": [
+          {
+            "format": "medline",
+            "name": "STAT",
+            "value": "Publisher"
+          },
+          {
+            "format": "medline",
+            "name": "AID",
+            "value": "NBK50001 [bookaccession]"
+          }
+        ]
+      }
+    }
+  ]
+}
