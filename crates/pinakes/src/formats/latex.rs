@@ -144,9 +144,29 @@ fn markup(cmd: &str) -> Option<&'static str> {
 fn passthrough(cmd: &str) -> bool {
     matches!(
         cmd,
-        "textrm" | "textsf" | "texttt" | "textnormal" | "mbox" | "hbox" | "text" | "mathrm" | "mathsf" | "mathtt"
-            | "textup" | "textmd" | "ensuremath" | "url" | "nolinkurl" | "NoCaseChange" | "MakeUppercase" | "uppercase"
-            | "MakeLowercase" | "lowercase" | "href" | "foreignlanguage" | "hyphenation"
+        "textrm"
+            | "textsf"
+            | "texttt"
+            | "textnormal"
+            | "mbox"
+            | "hbox"
+            | "text"
+            | "mathrm"
+            | "mathsf"
+            | "mathtt"
+            | "textup"
+            | "textmd"
+            | "ensuremath"
+            | "url"
+            | "nolinkurl"
+            | "NoCaseChange"
+            | "MakeUppercase"
+            | "uppercase"
+            | "MakeLowercase"
+            | "lowercase"
+            | "href"
+            | "foreignlanguage"
+            | "hyphenation"
     )
 }
 
@@ -299,7 +319,9 @@ fn convert(src: &str) -> String {
                 } else if let Some(tag) = markup(&name) {
                     let inner = p.argument();
                     if tag == "sc" {
-                        out.push_str(&format!("<span style=\"font-variant:small-caps;\">{inner}</span>"));
+                        out.push_str(&format!(
+                            "<span style=\"font-variant:small-caps;\">{inner}</span>"
+                        ));
                     } else {
                         out.push_str(&format!("<{tag}>{inner}</{tag}>"));
                     }
@@ -463,7 +485,11 @@ fn encode_char(c: char) -> String {
     let decomposed: Vec<char> = c.to_string().nfd().collect();
     if decomposed.len() == 2 && decomposed[0].is_ascii() {
         if let Some(cmd) = reverse_accent(decomposed[1]) {
-            let base = if decomposed[0] == 'i' { "\\i".to_string() } else { decomposed[0].to_string() };
+            let base = if decomposed[0] == 'i' {
+                "\\i".to_string()
+            } else {
+                decomposed[0].to_string()
+            };
             return if cmd.chars().all(|c| c.is_ascii_alphabetic()) {
                 format!("{{\\{cmd}{{{base}}}}}")
             } else {
@@ -488,11 +514,17 @@ fn html_to_latex(s: &str) -> String {
         ("<strong>", "</strong>", "textbf"),
         ("<sup>", "</sup>", "textsuperscript"),
         ("<sub>", "</sub>", "textsubscript"),
-        ("<span style=\"font-variant:small-caps;\">", "</span>", "textsc"),
+        (
+            "<span style=\"font-variant:small-caps;\">",
+            "</span>",
+            "textsc",
+        ),
         ("<span class=\"nocase\">", "</span>", ""),
     ] {
         while let Some(a) = out.find(open) {
-            let Some(rel) = out[a + open.len()..].find(close) else { break };
+            let Some(rel) = out[a + open.len()..].find(close) else {
+                break;
+            };
             let b = a + open.len() + rel;
             let inner = out[a + open.len()..b].to_string();
             let replacement = if cmd.is_empty() {
@@ -531,26 +563,61 @@ mod tests {
 
     #[test]
     fn accents_and_symbols() {
-        assert_eq!(latex_to_text(r#"M{\"u}ller and Stra\ss{}e"#), "Müller and Straße");
-        assert_eq!(latex_to_text(r#"\'{e}t\'e -- {DNA} \textit{in situ}"#), "été – DNA <i>in situ</i>");
+        assert_eq!(
+            latex_to_text(r#"M{\"u}ller and Stra\ss{}e"#),
+            "Müller and Straße"
+        );
+        assert_eq!(
+            latex_to_text(r#"\'{e}t\'e -- {DNA} \textit{in situ}"#),
+            "été – DNA <i>in situ</i>"
+        );
         assert_eq!(latex_to_text(r"10~km \& more"), "10 km & more");
-        assert_eq!(latex_to_text(r#"\c{c}a \c c \v{s} \k{a} \"{\i}"#), "ça ç š ą ï");
-        assert_eq!(latex_to_text(r"H$_2$O and $\alpha$-decay"), "H<sub>2</sub>O and α-decay");
-        assert_eq!(latex_to_text(r"\textsc{Unesco} \url{https://example.org/a_b}"), "<span style=\"font-variant:small-caps;\">Unesco</span> https://example.org/a_b");
+        assert_eq!(
+            latex_to_text(r#"\c{c}a \c c \v{s} \k{a} \"{\i}"#),
+            "ça ç š ą ï"
+        );
+        assert_eq!(
+            latex_to_text(r"H$_2$O and $\alpha$-decay"),
+            "H<sub>2</sub>O and α-decay"
+        );
+        assert_eq!(
+            latex_to_text(r"\textsc{Unesco} \url{https://example.org/a_b}"),
+            "<span style=\"font-variant:small-caps;\">Unesco</span> https://example.org/a_b"
+        );
         assert_eq!(latex_to_text(r"``quoted'' text"), "“quoted” text");
     }
 
     #[test]
     fn writing() {
-        assert_eq!(text_to_latex("Müller & Søn", true, false), r#"M{\"u}ller \& S{\o}n"#);
-        assert_eq!(text_to_latex("Müller & Søn", false, false), r"Müller \& Søn");
-        assert_eq!(text_to_latex("The DNA of <i>Bombyx</i>", false, true), r"The {DNA} of \textit{Bombyx}");
+        assert_eq!(
+            text_to_latex("Müller & Søn", true, false),
+            r#"M{\"u}ller \& S{\o}n"#
+        );
+        assert_eq!(
+            text_to_latex("Müller & Søn", false, false),
+            r"Müller \& Søn"
+        );
+        assert_eq!(
+            text_to_latex("The DNA of <i>Bombyx</i>", false, true),
+            r"The {DNA} of \textit{Bombyx}"
+        );
         assert_eq!(text_to_latex("ça", true, false), r"{\c{c}}a");
     }
 
     #[test]
     fn unbalanced_input_does_not_panic() {
-        for s in ["{", "}", "\\", "\\\"", "$", "\\textit{", "{\\\"", "^", "--", "\\c"] {
+        for s in [
+            "{",
+            "}",
+            "\\",
+            "\\\"",
+            "$",
+            "\\textit{",
+            "{\\\"",
+            "^",
+            "--",
+            "\\c",
+        ] {
             let _ = latex_to_text(s);
         }
     }

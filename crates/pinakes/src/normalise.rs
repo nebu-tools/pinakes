@@ -39,12 +39,41 @@ pub fn normalise(r: &mut Reference) -> Vec<Diagnostic> {
             }
         }
     }
+    identifiers_from_note(r);
     if r.arxiv.is_none() {
-        let from_doi = r.doi.as_deref().filter(|d| d.starts_with("10.48550/arxiv.")).and_then(id::arxiv);
-        let from_url = r.url.as_deref().filter(|u| u.to_ascii_lowercase().contains("arxiv.org/")).and_then(id::arxiv);
+        let from_doi = r
+            .doi
+            .as_deref()
+            .filter(|d| d.starts_with("10.48550/arxiv."))
+            .and_then(id::arxiv);
+        let from_url = r
+            .url
+            .as_deref()
+            .filter(|u| u.to_ascii_lowercase().contains("arxiv.org/"))
+            .and_then(id::arxiv);
         r.arxiv = from_doi.or(from_url);
     }
 
+    // A PMCID in the PMID column is a common spreadsheet slip; move it where it belongs.
+    if let Some(p) = r
+        .pmid
+        .as_deref()
+        .filter(|p| id::pmid(p).is_none())
+        .and_then(id::pmcid)
+    {
+        if r.pmcid
+            .as_deref()
+            .and_then(id::pmcid)
+            .is_none_or(|have| have == p)
+        {
+            diags.push(Diagnostic::warning(
+                "id.pmcid-as-pmid",
+                format!("{p} is a PMCID, not a PMID; moved it to the PMCID field"),
+            ));
+            r.pmcid = Some(p);
+            r.pmid = None;
+        }
+    }
     let mut check = |kind: IdKind, slot: &mut Option<String>| {
         let Some(raw) = slot.clone() else { return };
         if raw.trim().is_empty() {
@@ -56,14 +85,23 @@ pub fn normalise(r: &mut Reference) -> Vec<Diagnostic> {
             Err(e) => {
                 // ISBN and ISSN fields often hold several values; normalise each.
                 if matches!(kind, IdKind::Isbn | IdKind::Issn) {
-                    let parts: Vec<&str> = raw.split([';', ',', ' ', '\n']).filter(|s| !s.trim().is_empty()).collect();
-                    let good: Vec<String> = parts.iter().filter_map(|p| id::normalise(kind, p).ok()).collect();
+                    let parts: Vec<&str> = raw
+                        .split([';', ',', ' ', '\n'])
+                        .filter(|s| !s.trim().is_empty())
+                        .collect();
+                    let good: Vec<String> = parts
+                        .iter()
+                        .filter_map(|p| id::normalise(kind, p).ok())
+                        .collect();
                     if !good.is_empty() && parts.len() > 1 {
                         *slot = Some(good.join(" "));
                         return;
                     }
                 }
-                diags.push(Diagnostic::warning(code_for(kind), format!("{e}; kept it as written")));
+                diags.push(Diagnostic::warning(
+                    code_for(kind),
+                    format!("{e}; kept it as written"),
+                ));
                 *slot = Some(raw.trim().to_string());
             }
         }
@@ -78,7 +116,8 @@ pub fn normalise(r: &mut Reference) -> Vec<Diagnostic> {
     r.author.retain(|n| !n.is_empty());
     r.editor.retain(|n| !n.is_empty());
     let mut seen = std::collections::HashSet::new();
-    r.keywords.retain(|k| !k.trim().is_empty() && seen.insert(k.trim().to_lowercase()));
+    r.keywords
+        .retain(|k| !k.trim().is_empty() && seen.insert(k.trim().to_lowercase()));
     diags
 }
 
@@ -93,6 +132,29 @@ fn code_for(kind: IdKind) -> &'static str {
     }
 }
 
+/// Zotero writes identifiers it has no field for into its Extra field, one `Key: value` per
+/// line, which reaches RIS as `N1` and CSL-JSON as `note`. Fill empty identifier fields from
+/// them, leaving the note as it is.
+fn identifiers_from_note(r: &mut Reference) {
+    let Some(note) = r.note.clone() else { return };
+    for line in note.lines() {
+        let Some((k, v)) = line.split_once(':') else {
+            continue;
+        };
+        let slot = match k.trim().to_ascii_lowercase().as_str() {
+            "pmid" => &mut r.pmid,
+            "pmcid" => &mut r.pmcid,
+            "doi" => &mut r.doi,
+            "arxiv" | "arxiv id" => &mut r.arxiv,
+            "citation key" => &mut r.citation_key,
+            _ => continue,
+        };
+        if slot.is_none() {
+            *slot = crate::text::non_empty(v);
+        }
+    }
+}
+
 /// "301--310", "301 – 310", "301—10" become "301-310" and "301-10". Other text is kept.
 pub fn page_range(p: &str) -> String {
     let p = p.trim();
@@ -103,7 +165,10 @@ pub fn page_range(p: &str) -> String {
             while out.ends_with(' ') {
                 out.pop();
             }
-            while matches!(chars.peek(), Some('-' | '\u{2010}'..='\u{2015}' | '\u{2212}' | ' ')) {
+            while matches!(
+                chars.peek(),
+                Some('-' | '\u{2010}'..='\u{2015}' | '\u{2212}' | ' ')
+            ) {
                 chars.next();
             }
             out.push('-');
@@ -116,14 +181,20 @@ pub fn page_range(p: &str) -> String {
 
 /// Finish a freshly read record: normalise it, attach diagnostics to it, and note a missing
 /// title.
-pub(crate) fn finish(r: &mut Reference, index: usize, line: Option<usize>, diags: &mut Vec<Diagnostic>) {
+pub(crate) fn finish(
+    r: &mut Reference,
+    index: usize,
+    line: Option<usize>,
+    diags: &mut Vec<Diagnostic>,
+) {
     for mut d in normalise(r) {
         d.record = Some(index);
         d.line = d.line.or(line);
         diags.push(d);
     }
     if r.title.is_none() {
-        let mut d = Diagnostic::warning("record.no-title", format!("Record {} has no title", r.id)).record(index);
+        let mut d = Diagnostic::warning("record.no-title", format!("Record {} has no title", r.id))
+            .record(index);
         d.line = line;
         diags.push(d);
     }

@@ -31,15 +31,27 @@ pub struct InvalidId {
 
 impl fmt::Display for InvalidId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?} is not a valid {}: {}", self.input, self.kind.label(), self.reason)
+        write!(
+            f,
+            "{:?} is not a valid {}: {}",
+            self.input,
+            self.kind.label(),
+            self.reason
+        )
     }
 }
 
 impl std::error::Error for InvalidId {}
 
 impl IdKind {
-    pub const ALL: [IdKind; 6] =
-        [IdKind::Doi, IdKind::Pmid, IdKind::Pmcid, IdKind::Isbn, IdKind::Issn, IdKind::Arxiv];
+    pub const ALL: [IdKind; 6] = [
+        IdKind::Doi,
+        IdKind::Pmid,
+        IdKind::Pmcid,
+        IdKind::Isbn,
+        IdKind::Issn,
+        IdKind::Arxiv,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -64,14 +76,22 @@ impl IdKind {
     }
 
     pub fn from_name(name: &str) -> Option<IdKind> {
-        IdKind::ALL.into_iter().find(|k| k.name().eq_ignore_ascii_case(name))
+        IdKind::ALL
+            .into_iter()
+            .find(|k| k.name().eq_ignore_ascii_case(name))
     }
 }
 
 /// Reduce an identifier of a known kind to its normal form, or say why it is not one.
 pub fn normalise(kind: IdKind, input: &str) -> Result<String, InvalidId> {
-    let fail = |reason| InvalidId { kind, input: input.to_string(), reason };
-    let s = input.trim().trim_matches(|c: char| c == '<' || c == '>' || c == '"');
+    let fail = |reason| InvalidId {
+        kind,
+        input: input.to_string(),
+        reason,
+    };
+    let s = input
+        .trim()
+        .trim_matches(|c: char| c == '<' || c == '>' || c == '"');
     match kind {
         IdKind::Doi => doi(s).ok_or_else(|| fail("a DOI is 10.<registrant>/<suffix>")),
         IdKind::Pmid => pmid(s).ok_or_else(|| fail("a PMID is 1 to 9 digits")),
@@ -100,7 +120,12 @@ pub fn detect(input: &str) -> Option<(IdKind, String)> {
             return Some((IdKind::Pmcid, p));
         }
     }
-    if lower.contains("isbn") || s.chars().filter(|c| c.is_ascii_digit() || *c == 'X' || *c == 'x').count() >= 10 {
+    if lower.contains("isbn")
+        || s.chars()
+            .filter(|c| c.is_ascii_digit() || *c == 'X' || *c == 'x')
+            .count()
+            >= 10
+    {
         if let Ok(i) = isbn(s) {
             return Some((IdKind::Isbn, i));
         }
@@ -117,7 +142,10 @@ pub fn detect(input: &str) -> Option<(IdKind, String)> {
 }
 
 fn strip_prefix_ci<'a>(s: &'a str, prefix: &str) -> Option<&'a str> {
-    if s.len() >= prefix.len() && s.is_char_boundary(prefix.len()) && s[..prefix.len()].eq_ignore_ascii_case(prefix) {
+    if s.len() >= prefix.len()
+        && s.is_char_boundary(prefix.len())
+        && s[..prefix.len()].eq_ignore_ascii_case(prefix)
+    {
         Some(&s[prefix.len()..])
     } else {
         None
@@ -177,7 +205,10 @@ pub fn doi(input: &str) -> Option<String> {
     let d = d.trim_end_matches(['.', ',', ';', ')', ']']);
     let (prefix, suffix) = d.split_once('/')?;
     let registrant = prefix.strip_prefix("10.")?;
-    if registrant.is_empty() || !registrant.chars().all(|c| c.is_ascii_digit() || c == '.') || suffix.is_empty() {
+    if registrant.is_empty()
+        || !registrant.chars().all(|c| c.is_ascii_digit() || c == '.')
+        || suffix.is_empty()
+    {
         return None;
     }
     let digits = registrant.split('.').next().unwrap_or("");
@@ -226,7 +257,11 @@ pub fn pmcid(input: &str) -> Option<String> {
         s = s.trim_end_matches('/').rsplit('/').next()?;
     }
     let digits = strip_prefix_ci(s, "pmc")?;
-    let digits = digits.split_whitespace().next().unwrap_or("").trim_end_matches(['.', ',', ';']);
+    let digits = digits
+        .split_whitespace()
+        .next()
+        .unwrap_or("")
+        .trim_end_matches(['.', ',', ';']);
     if digits.is_empty() || digits.len() > 10 || !digits.chars().all(|c| c.is_ascii_digit()) {
         return None;
     }
@@ -236,7 +271,9 @@ pub fn pmcid(input: &str) -> Option<String> {
 /// ISBN normal form: the 13 digits, check digit verified. ISBN-10 is converted.
 pub fn isbn(input: &str) -> Result<String, &'static str> {
     let mut s = input.trim();
-    for prefix in ["isbn-13:", "isbn-10:", "isbn13:", "isbn10:", "isbn:", "isbn"] {
+    for prefix in [
+        "isbn-13:", "isbn-10:", "isbn13:", "isbn10:", "isbn:", "isbn",
+    ] {
         if let Some(rest) = strip_prefix_ci(s, prefix) {
             s = rest.trim();
             break;
@@ -245,7 +282,9 @@ pub fn isbn(input: &str) -> Result<String, &'static str> {
     // "978-3-16-148410-0 (pbk.)": take the leading run of ISBN characters.
     let core: String = s
         .chars()
-        .take_while(|c| c.is_ascii_digit() || matches!(c, '-' | ' ' | 'X' | 'x' | '\u{2010}'..='\u{2015}'))
+        .take_while(|c| {
+            c.is_ascii_digit() || matches!(c, '-' | ' ' | 'X' | 'x' | '\u{2010}'..='\u{2015}')
+        })
         .filter(|c| c.is_ascii_digit() || *c == 'X' || *c == 'x')
         .collect();
     match core.len() {
@@ -301,16 +340,26 @@ pub fn issn(input: &str) -> Result<String, &'static str> {
     }
     let core: String = s
         .chars()
-        .take_while(|c| c.is_ascii_digit() || matches!(c, '-' | 'X' | 'x' | '\u{2010}'..='\u{2015}'))
+        .take_while(|c| {
+            c.is_ascii_digit() || matches!(c, '-' | 'X' | 'x' | '\u{2010}'..='\u{2015}')
+        })
         .filter(|c| c.is_ascii_digit() || *c == 'X' || *c == 'x')
         .collect::<String>()
         .to_ascii_uppercase();
     if core.len() != 8 || !core[..7].chars().all(|c| c.is_ascii_digit()) {
         return Err("an ISSN has 8 characters");
     }
-    let sum: u32 = core[..7].chars().enumerate().map(|(i, c)| c.to_digit(10).unwrap_or(0) * (8 - i as u32)).sum();
+    let sum: u32 = core[..7]
+        .chars()
+        .enumerate()
+        .map(|(i, c)| c.to_digit(10).unwrap_or(0) * (8 - i as u32))
+        .sum();
     let check = (11 - sum % 11) % 11;
-    let expected = if check == 10 { 'X' } else { char::from_digit(check, 10).unwrap_or('0') };
+    let expected = if check == 10 {
+        'X'
+    } else {
+        char::from_digit(check, 10).unwrap_or('0')
+    };
     if core.as_bytes()[7] as char != expected {
         return Err("the ISSN check digit does not match");
     }
@@ -331,9 +380,17 @@ pub fn arxiv(input: &str) -> Option<String> {
         let path = path.split_once('/').map(|(_, p)| p).unwrap_or(path);
         s = path.trim_end_matches(".pdf");
     }
-    let s = s.split(['?', '#', ' ']).next()?.trim_end_matches(['/', '.', ',', ';']);
+    let s = s
+        .split(['?', '#', ' '])
+        .next()?
+        .trim_end_matches(['/', '.', ',', ';']);
     let (body, version) = match s.rfind('v') {
-        Some(at) if at + 1 < s.len() && s[at + 1..].chars().all(|c| c.is_ascii_digit()) && at > 0 && s.as_bytes()[at - 1].is_ascii_digit() => {
+        Some(at)
+            if at + 1 < s.len()
+                && s[at + 1..].chars().all(|c| c.is_ascii_digit())
+                && at > 0
+                && s.as_bytes()[at - 1].is_ascii_digit() =>
+        {
             (&s[..at], Some(&s[at..]))
         }
         _ => (s, None),
@@ -347,8 +404,13 @@ pub fn arxiv(input: &str) -> Option<String> {
     });
     let old_style = body.split_once('/').is_some_and(|(archive, num)| {
         !archive.is_empty()
-            && archive.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c == '.' || c.is_ascii_uppercase())
-            && archive.chars().next().is_some_and(|c| c.is_ascii_alphabetic())
+            && archive
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c == '-' || c == '.' || c.is_ascii_uppercase())
+            && archive
+                .chars()
+                .next()
+                .is_some_and(|c| c.is_ascii_alphabetic())
             && num.len() == 7
             && num.chars().all(|c| c.is_ascii_digit())
     });
@@ -393,9 +455,16 @@ mod tests {
             "https://doi.org/10.5555%2Fmoth.2019.001",
             " 10.5555/moth.2019.001. ",
         ] {
-            assert_eq!(doi(dressed).as_deref(), Some("10.5555/moth.2019.001"), "{dressed}");
+            assert_eq!(
+                doi(dressed).as_deref(),
+                Some("10.5555/moth.2019.001"),
+                "{dressed}"
+            );
         }
-        assert_eq!(doi("10.1016/S2213-2600(20)30517-8").as_deref(), Some("10.1016/s2213-2600(20)30517-8"));
+        assert_eq!(
+            doi("10.1016/S2213-2600(20)30517-8").as_deref(),
+            Some("10.1016/s2213-2600(20)30517-8")
+        );
         assert_eq!(doi("not a doi"), None);
         assert_eq!(doi("10.12/x"), None);
         assert_eq!(doi("10.5555/"), None);
@@ -403,20 +472,29 @@ mod tests {
 
     #[test]
     fn pubmed_ids() {
-        assert_eq!(pmid("PMID: 31987691").as_deref(), Some("31987691"));
-        assert_eq!(pmid("https://pubmed.ncbi.nlm.nih.gov/31987691/").as_deref(), Some("31987691"));
+        assert_eq!(pmid("PMID: 30001202").as_deref(), Some("30001202"));
+        assert_eq!(
+            pmid("https://pubmed.ncbi.nlm.nih.gov/30001202/").as_deref(),
+            Some("30001202")
+        );
         assert_eq!(pmid("PMC123"), None);
         assert_eq!(pmid("12a"), None);
         assert_eq!(pmcid("PMC7654321").as_deref(), Some("PMC7654321"));
         assert_eq!(pmcid("pmcid: pmc7654321").as_deref(), Some("PMC7654321"));
-        assert_eq!(pmcid("https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7654321/").as_deref(), Some("PMC7654321"));
+        assert_eq!(
+            pmcid("https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7654321/").as_deref(),
+            Some("PMC7654321")
+        );
         assert_eq!(pmcid("7654321"), None);
     }
 
     #[test]
     fn isbns_and_issns() {
         assert_eq!(isbn("0-306-40615-2").as_deref(), Ok("9780306406157"));
-        assert_eq!(isbn("ISBN 978-0-306-40615-7 (pbk.)").as_deref(), Ok("9780306406157"));
+        assert_eq!(
+            isbn("ISBN 978-0-306-40615-7 (pbk.)").as_deref(),
+            Ok("9780306406157")
+        );
         assert!(isbn("978-0-306-40615-8").is_err());
         assert_eq!(isbn("0-8044-2957-X").as_deref(), Ok("9780804429573"));
         assert_eq!(issn("0378-5955").as_deref(), Ok("0378-5955"));
@@ -427,21 +505,45 @@ mod tests {
     #[test]
     fn arxiv_ids() {
         assert_eq!(arxiv("arXiv:2101.00001v2").as_deref(), Some("2101.00001v2"));
-        assert_eq!(arxiv("https://arxiv.org/abs/2101.00001").as_deref(), Some("2101.00001"));
-        assert_eq!(arxiv("https://arxiv.org/pdf/2101.00001v3.pdf").as_deref(), Some("2101.00001v3"));
-        assert_eq!(arxiv("10.48550/arXiv.2101.00001").as_deref(), Some("2101.00001"));
-        assert_eq!(arxiv("astro-ph/9901001").as_deref(), Some("astro-ph/9901001"));
+        assert_eq!(
+            arxiv("https://arxiv.org/abs/2101.00001").as_deref(),
+            Some("2101.00001")
+        );
+        assert_eq!(
+            arxiv("https://arxiv.org/pdf/2101.00001v3.pdf").as_deref(),
+            Some("2101.00001v3")
+        );
+        assert_eq!(
+            arxiv("10.48550/arXiv.2101.00001").as_deref(),
+            Some("2101.00001")
+        );
+        assert_eq!(
+            arxiv("astro-ph/9901001").as_deref(),
+            Some("astro-ph/9901001")
+        );
         assert_eq!(arxiv("math.GT/0309136").as_deref(), Some("math.GT/0309136"));
         assert_eq!(arxiv("2113.00001"), None);
     }
 
     #[test]
     fn detection() {
-        assert_eq!(detect("https://doi.org/10.5555/x"), Some((IdKind::Doi, "10.5555/x".into())));
+        assert_eq!(
+            detect("https://doi.org/10.5555/x"),
+            Some((IdKind::Doi, "10.5555/x".into()))
+        );
         assert_eq!(detect("PMC12345"), Some((IdKind::Pmcid, "PMC12345".into())));
-        assert_eq!(detect("31987691"), Some((IdKind::Pmid, "31987691".into())));
-        assert_eq!(detect("arXiv:2101.00001"), Some((IdKind::Arxiv, "2101.00001".into())));
-        assert_eq!(detect("978-0-306-40615-7"), Some((IdKind::Isbn, "9780306406157".into())));
-        assert_eq!(detect("0378-5955"), Some((IdKind::Issn, "0378-5955".into())));
+        assert_eq!(detect("30001202"), Some((IdKind::Pmid, "30001202".into())));
+        assert_eq!(
+            detect("arXiv:2101.00001"),
+            Some((IdKind::Arxiv, "2101.00001".into()))
+        );
+        assert_eq!(
+            detect("978-0-306-40615-7"),
+            Some((IdKind::Isbn, "9780306406157".into()))
+        );
+        assert_eq!(
+            detect("0378-5955"),
+            Some((IdKind::Issn, "0378-5955".into()))
+        );
     }
 }

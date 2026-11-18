@@ -14,7 +14,9 @@ fn types(kind: &str) -> (&'static str, Option<&'static str>) {
         "article-newspaper" => ("article", Some("newspaper")),
         "article" => ("article", None),
         "book" => ("book", None),
-        "chapter" | "entry-encyclopedia" | "entry-dictionary" | "entry" => ("chapter", Some("book")),
+        "chapter" | "entry-encyclopedia" | "entry-dictionary" | "entry" => {
+            ("chapter", Some("book"))
+        }
         "paper-conference" => ("article", Some("proceedings")),
         "report" => ("report", None),
         "thesis" => ("thesis", None),
@@ -42,7 +44,10 @@ fn scalar(s: &str) -> String {
         && !s.contains(": ")
         && !s.contains(" #")
         && !s.chars().any(|c| c.is_control())
-        && !matches!(s.to_ascii_lowercase().as_str(), "true" | "false" | "yes" | "no" | "null" | "on" | "off" | "~")
+        && !matches!(
+            s.to_ascii_lowercase().as_str(),
+            "true" | "false" | "yes" | "no" | "null" | "on" | "off" | "~"
+        )
         && s.parse::<f64>().is_err();
     if plain {
         return s.to_string();
@@ -66,7 +71,11 @@ fn scalar(s: &str) -> String {
 fn name(n: &Name) -> String {
     if let Some(l) = &n.literal {
         // Hayagriva splits a plain string at its first comma; braces keep an organisation whole.
-        return if l.contains(',') { format!("{{{l}}}") } else { l.clone() };
+        return if l.contains(',') {
+            format!("{{{l}}}")
+        } else {
+            l.clone()
+        };
     }
     let mut family = n.display_family();
     if let Some(d) = &n.dropping_particle {
@@ -129,7 +138,11 @@ pub fn write(refs: &[Reference]) -> String {
         o.buf.push_str(&scalar(key));
         o.buf.push_str(":\n");
         o.field(2, "type", Some(kind));
-        o.field(2, "title", r.title.as_deref().map(crate::text::strip_markup).as_deref());
+        o.field(
+            2,
+            "title",
+            r.title.as_deref().map(crate::text::strip_markup).as_deref(),
+        );
         o.list(2, "author", &r.author.iter().map(name).collect::<Vec<_>>());
         o.field(2, "date", r.issued.as_ref().and_then(date).as_deref());
         if parent.is_none() {
@@ -145,11 +158,31 @@ pub fn write(refs: &[Reference]) -> String {
         o.field(2, "language", r.language.as_deref());
         o.field(2, "url", r.url.as_deref());
         o.field(2, "accessed", r.accessed.as_ref().and_then(date).as_deref());
-        o.field(2, "abstract", r.abstract_text.as_deref().map(crate::text::strip_markup).as_deref());
+        o.field(
+            2,
+            "abstract",
+            r.abstract_text
+                .as_deref()
+                .map(crate::text::strip_markup)
+                .as_deref(),
+        );
         o.field(2, "note", r.note.as_deref());
-        let serial: Vec<(&str, &Option<String>)> = vec![("doi", &r.doi), ("pmid", &r.pmid), ("pmcid", &r.pmcid), ("isbn", &r.isbn), ("issn", &r.issn), ("arxiv", &r.arxiv)];
-        let serial: Vec<(&str, &str)> = serial.into_iter().filter_map(|(k, v)| v.as_deref().map(|v| (k, v))).collect();
-        let number = r.number.as_deref().filter(|_| parent.is_none() || r.kind != "report");
+        let serial: Vec<(&str, &Option<String>)> = vec![
+            ("doi", &r.doi),
+            ("pmid", &r.pmid),
+            ("pmcid", &r.pmcid),
+            ("isbn", &r.isbn),
+            ("issn", &r.issn),
+            ("arxiv", &r.arxiv),
+        ];
+        let serial: Vec<(&str, &str)> = serial
+            .into_iter()
+            .filter_map(|(k, v)| v.as_deref().map(|v| (k, v)))
+            .collect();
+        let number = r
+            .number
+            .as_deref()
+            .filter(|_| parent.is_none() || r.kind != "report");
         if !serial.is_empty() || number.is_some() {
             o.buf.push_str("  serial-number:\n");
             for (k, v) in serial {
@@ -157,7 +190,10 @@ pub fn write(refs: &[Reference]) -> String {
             }
             o.field(4, "number", number);
         }
-        let container = r.container_title.as_deref().or(r.collection_title.as_deref().filter(|_| parent.is_some()));
+        let container = r
+            .container_title
+            .as_deref()
+            .or(r.collection_title.as_deref().filter(|_| parent.is_some()));
         if let (Some(ptype), Some(ctitle)) = (parent, container) {
             o.buf.push_str("  parent:\n");
             o.field(4, "type", Some(ptype));

@@ -3,15 +3,50 @@
 use crate::model::{Date, Ymd};
 
 const MONTHS: &[(&str, u8)] = &[
-    ("january", 1), ("february", 2), ("march", 3), ("april", 4), ("may", 5), ("june", 6),
-    ("july", 7), ("august", 8), ("september", 9), ("october", 10), ("november", 11),
-    ("december", 12), ("jan", 1), ("feb", 2), ("mar", 3), ("apr", 4), ("jun", 6), ("jul", 7),
-    ("aug", 8), ("sep", 9), ("sept", 9), ("oct", 10), ("nov", 11), ("dec", 12),
+    ("january", 1),
+    ("february", 2),
+    ("march", 3),
+    ("april", 4),
+    ("may", 5),
+    ("june", 6),
+    ("july", 7),
+    ("august", 8),
+    ("september", 9),
+    ("october", 10),
+    ("november", 11),
+    ("december", 12),
+    ("jan", 1),
+    ("feb", 2),
+    ("mar", 3),
+    ("apr", 4),
+    ("jun", 6),
+    ("jul", 7),
+    ("aug", 8),
+    ("sep", 9),
+    ("sept", 9),
+    ("oct", 10),
+    ("nov", 11),
+    ("dec", 12),
     // German and French, common in European exports.
-    ("januar", 1), ("februar", 2), ("märz", 3), ("mai", 5), ("juni", 6), ("juli", 7),
-    ("oktober", 10), ("dezember", 12), ("janvier", 1), ("février", 2), ("mars", 3),
-    ("avril", 4), ("juin", 6), ("juillet", 7), ("août", 8), ("septembre", 9), ("octobre", 10),
-    ("novembre", 11), ("décembre", 12),
+    ("januar", 1),
+    ("februar", 2),
+    ("märz", 3),
+    ("mai", 5),
+    ("juni", 6),
+    ("juli", 7),
+    ("oktober", 10),
+    ("dezember", 12),
+    ("janvier", 1),
+    ("février", 2),
+    ("mars", 3),
+    ("avril", 4),
+    ("juin", 6),
+    ("juillet", 7),
+    ("août", 8),
+    ("septembre", 9),
+    ("octobre", 10),
+    ("novembre", 11),
+    ("décembre", 12),
 ];
 
 const SEASONS: &[&str] = &["spring", "summer", "autumn", "fall", "winter"];
@@ -90,11 +125,16 @@ pub fn parse_date(input: &str) -> Option<Date> {
         return None;
     }
     let toks = tokens(s);
-    let mut date = Date { circa: toks.contains(&Tok::Circa), ..Date::default() };
+    let mut date = Date {
+        circa: toks.contains(&Tok::Circa),
+        ..Date::default()
+    };
 
     // ISO 8601: 2020, 2020-05, 2020-05-01, 2020-05-01T12:00:00Z, and intervals 2020/2021.
     let iso = match s.find('T') {
-        Some(at) if at >= 10 && s[..at].bytes().all(|b| b.is_ascii_digit() || b == b'-') => &s[..at],
+        Some(at) if at >= 10 && s[..at].bytes().all(|b| b.is_ascii_digit() || b == b'-') => {
+            &s[..at]
+        }
         _ => s,
     };
     if let Some(ymd) = parse_simple(iso) {
@@ -124,7 +164,11 @@ pub fn parse_date(input: &str) -> Option<Date> {
         date.literal = Some(s.to_string());
         return Some(date);
     };
-    let mut start = Ymd { year, month: None, day: None };
+    let mut start = Ymd {
+        year,
+        month: None,
+        day: None,
+    };
     let mut lossy = toks.iter().any(|t| matches!(t, Tok::Season | Tok::Word));
 
     let nums_after: Vec<u32> = toks[year_at + 1..]
@@ -142,8 +186,13 @@ pub fn parse_date(input: &str) -> Option<Date> {
             start.month = Some(m);
         }
         // Day: a 1-2 digit number next to the month.
-        let day = toks.get(mi + 1).or(if mi > 0 { toks.get(mi - 1) } else { None });
-        let day = match (toks.get(mi + 1), if mi > 0 { toks.get(mi - 1) } else { None }) {
+        let day = toks
+            .get(mi + 1)
+            .or(if mi > 0 { toks.get(mi - 1) } else { None });
+        let day = match (
+            toks.get(mi + 1),
+            if mi > 0 { toks.get(mi - 1) } else { None },
+        ) {
             (Some(Tok::Num(n, d)), _) if *d <= 2 => Some(*n),
             (_, Some(Tok::Num(n, d))) if *d <= 2 => Some(*n),
             _ => {
@@ -256,7 +305,11 @@ fn parse_simple(s: &str) -> Option<Ymd> {
     if parts.len() > 3 || parts[0].len() != 4 {
         return None;
     }
-    let num = |p: &str, len: usize| (p.len() == len && p.bytes().all(|b| b.is_ascii_digit())).then(|| p.parse::<u32>().ok()).flatten();
+    let num = |p: &str, len: usize| {
+        (p.len() == len && p.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| p.parse::<u32>().ok())
+            .flatten()
+    };
     let year = num(parts[0], 4)? as i32;
     if !(1000..=2999).contains(&year) {
         return None;
@@ -277,7 +330,11 @@ mod tests {
     use super::*;
 
     fn ymd(s: &str) -> (i32, Option<u8>, Option<u8>) {
-        let d = parse_date(s).and_then(|d| d.start).unwrap_or(Ymd { year: 0, month: None, day: None });
+        let d = parse_date(s).and_then(|d| d.start).unwrap_or(Ymd {
+            year: 0,
+            month: None,
+            day: None,
+        });
         (d.year, d.month, d.day)
     }
 
@@ -314,6 +371,9 @@ mod tests {
         assert_eq!(d.literal.as_deref(), Some("in press"));
         assert!(parse_date("///").is_none());
         let d = parse_date("05/06/2020").unwrap();
-        assert!(d.raw.is_some(), "ambiguous day and month must keep the source text");
+        assert!(
+            d.raw.is_some(),
+            "ambiguous day and month must keep the source text"
+        );
     }
 }

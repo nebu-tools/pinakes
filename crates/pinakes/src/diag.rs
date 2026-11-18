@@ -39,7 +39,13 @@ impl Severity {
 
 impl Diagnostic {
     pub fn new(severity: Severity, code: &'static str, message: impl Into<String>) -> Diagnostic {
-        Diagnostic { severity, code, message: message.into(), line: None, record: None }
+        Diagnostic {
+            severity,
+            code,
+            message: message.into(),
+            line: None,
+            record: None,
+        }
     }
 
     pub fn error(code: &'static str, message: impl Into<String>) -> Diagnostic {
@@ -70,6 +76,12 @@ impl fmt::Display for Diagnostic {
         if let Some(line) = self.line {
             write!(f, "line {line}: ")?;
         }
-        write!(f, "{}: {} [{}]", self.severity.as_str(), self.message, self.code)
+        write!(
+            f,
+            "{}: {} [{}]",
+            self.severity.as_str(),
+            self.message,
+            self.code
+        )
     }
 }

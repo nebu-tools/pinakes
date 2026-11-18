@@ -21,7 +21,11 @@ pub(crate) fn tag_line(line: &str) -> Option<(&str, &str)> {
     if b.is_empty() || !b[0].is_ascii_uppercase() {
         return None;
     }
-    let n = b.iter().take(5).take_while(|c| c.is_ascii_uppercase() || c.is_ascii_digit()).count();
+    let n = b
+        .iter()
+        .take(5)
+        .take_while(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        .count();
     if !(2..=4).contains(&n) {
         return None;
     }
@@ -79,7 +83,11 @@ fn records(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<RawRecord> {
                     );
                     out.push(rec);
                 }
-                current = Some(RawRecord { line: lineno, fields: vec![(tag, value.to_string(), lineno)], closed: false });
+                current = Some(RawRecord {
+                    line: lineno,
+                    fields: vec![(tag, value.to_string(), lineno)],
+                    closed: false,
+                });
                 continue;
             }
             if tag == "ER" {
@@ -88,17 +96,27 @@ fn records(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<RawRecord> {
                         rec.closed = true;
                         out.push(rec);
                     }
-                    None => diags.push(Diagnostic::warning("ris.stray-er", "ER with no record open; ignored it").at(lineno)),
+                    None => diags.push(
+                        Diagnostic::warning("ris.stray-er", "ER with no record open; ignored it")
+                            .at(lineno),
+                    ),
                 }
                 continue;
             }
             let rec = current.get_or_insert_with(|| {
                 diags.push(
-                    Diagnostic::warning("ris.no-ty", format!("{tag} before any TY; started a record of unknown type"))
-                        .at(lineno)
-                        .record(out.len()),
+                    Diagnostic::warning(
+                        "ris.no-ty",
+                        format!("{tag} before any TY; started a record of unknown type"),
+                    )
+                    .at(lineno)
+                    .record(out.len()),
                 );
-                RawRecord { line: lineno, fields: Vec::new(), closed: false }
+                RawRecord {
+                    line: lineno,
+                    fields: Vec::new(),
+                    closed: false,
+                }
             });
             rec.fields.push((tag, value.to_string(), lineno));
             continue;
@@ -109,7 +127,9 @@ fn records(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<RawRecord> {
                 let piece = line.trim();
                 let piece = piece.strip_prefix("- ").unwrap_or(piece);
                 if !value.is_empty() {
-                    if joins_with_newline(tag) && (blank_pending || line.starts_with(|c: char| !c.is_whitespace())) {
+                    if joins_with_newline(tag)
+                        && (blank_pending || line.starts_with(|c: char| !c.is_whitespace()))
+                    {
                         value.push('\n');
                     } else {
                         value.push(' ');
@@ -123,15 +143,27 @@ fn records(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<RawRecord> {
     }
     if let Some(rec) = current.take() {
         diags.push(
-            Diagnostic::warning("ris.missing-er", format!("Record starting on line {} has no ER at the end of the input; kept it", rec.line))
-                .at(rec.line)
-                .record(out.len()),
+            Diagnostic::warning(
+                "ris.missing-er",
+                format!(
+                    "Record starting on line {} has no ER at the end of the input; kept it",
+                    rec.line
+                ),
+            )
+            .at(rec.line)
+            .record(out.len()),
         );
         out.push(rec);
     }
     for (line, text) in stray {
         let shown: String = text.chars().take(60).collect();
-        diags.push(Diagnostic::error("ris.stray-text", format!("Text outside any record was not read: {shown:?}")).at(line));
+        diags.push(
+            Diagnostic::error(
+                "ris.stray-text",
+                format!("Text outside any record was not read: {shown:?}"),
+            )
+            .at(line),
+        );
     }
     out
 }
@@ -219,10 +251,26 @@ fn pubmed_hint(fields: &[(String, String, usize)]) -> Option<bool> {
             continue;
         }
         let v = value.to_ascii_lowercase();
-        if ["embase", "scopus", "web of science", "webofscience", "cinahl", "psycinfo", "ebsco", "proquest", "cochrane"].iter().any(|k| v.contains(k)) {
+        if [
+            "embase",
+            "scopus",
+            "web of science",
+            "webofscience",
+            "cinahl",
+            "psycinfo",
+            "ebsco",
+            "proquest",
+            "cochrane",
+        ]
+        .iter()
+        .any(|k| v.contains(k))
+        {
             return Some(false);
         }
-        if ["pubmed", "medline", "ncbi.nlm.nih.gov"].iter().any(|k| v.contains(k)) {
+        if ["pubmed", "medline", "ncbi.nlm.nih.gov"]
+            .iter()
+            .any(|k| v.contains(k))
+        {
             verdict = Some(true);
         }
     }
@@ -231,10 +279,62 @@ fn pubmed_hint(fields: &[(String, String, usize)]) -> Option<bool> {
 
 fn looks_like_database(s: &str) -> bool {
     let v = s.to_ascii_lowercase();
-    ["cochrane", "register", "database", "library", "ovid", "embase", "medline", "pubmed", "scopus", "web of science"]
-        .iter()
-        .any(|k| v.contains(k))
+    [
+        "cochrane",
+        "register",
+        "database",
+        "library",
+        "ovid",
+        "embase",
+        "medline",
+        "pubmed",
+        "scopus",
+        "web of science",
+    ]
+    .iter()
+    .any(|k| v.contains(k))
         && !v.contains(',')
+}
+
+struct Source {
+    journal: String,
+    volume: Option<String>,
+    issue: Option<String>,
+    page: Option<String>,
+    date: Option<String>,
+}
+
+/// Ovid's one-line citation, `Journal title. 373(3):220-31, 2015 Jul 16.`. `None` when the
+/// text does not have that shape.
+fn parse_source(s: &str) -> Option<Source> {
+    let s = s.trim().trim_end_matches('.');
+    let (journal, rest) = s.rsplit_once(". ")?;
+    let (citation, date) = match rest.split_once(", ") {
+        Some((c, d)) => (c, Some(d.trim().to_string())),
+        None => (rest, None),
+    };
+    let (vol_issue, page) = match citation.split_once(':') {
+        Some((v, p)) => (v, Some(p.trim().to_string())),
+        None => (citation, None),
+    };
+    let (volume, issue) = match vol_issue.split_once('(') {
+        Some((v, i)) => (v.trim(), Some(i.trim_end_matches(')').trim().to_string())),
+        None => (vol_issue.trim(), None),
+    };
+    let volume_ok = !volume.is_empty()
+        && volume
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-');
+    if !volume_ok || !volume.chars().any(|c| c.is_ascii_digit()) || journal.trim().is_empty() {
+        return None;
+    }
+    Some(Source {
+        journal: journal.trim().to_string(),
+        volume: Some(volume.to_string()),
+        issue: issue.filter(|i| !i.is_empty()),
+        page,
+        date,
+    })
 }
 
 fn set_once(slot: &mut Option<String>, value: &str) -> bool {
@@ -248,7 +348,11 @@ fn set_once(slot: &mut Option<String>, value: &str) -> bool {
 
 fn to_reference(raw: RawRecord, index: usize, diags: &mut Vec<Diagnostic>) -> Reference {
     let mut r = Reference::default();
-    let ty = raw.fields.iter().find(|(t, _, _)| t == "TY").map(|(_, v, _)| v.trim().to_string());
+    let ty = raw
+        .fields
+        .iter()
+        .find(|(t, _, _)| t == "TY")
+        .map(|(_, v, _)| v.trim().to_string());
     match &ty {
         Some(t) => {
             r.kind = kind_from_ris(t).to_string();
@@ -350,13 +454,39 @@ fn to_reference(raw: RawRecord, index: usize, diags: &mut Vec<Diagnostic>) -> Re
                     set_once(&mut r.issn, v)
                 }
             }
-            "DO" => set_once(&mut r.doi, v),
+            "DO" => {
+                set_once(&mut r.doi, v)
+                    || (r.doi.as_deref().and_then(crate::id::doi) == crate::id::doi(v)
+                        && crate::id::doi(v).is_some())
+            }
             "UR" | "L2" => {
-                if r.doi.is_none() && v.to_ascii_lowercase().contains("doi.org/10.") {
-                    r.doi = crate::id::doi(v);
+                // Mendeley puts several links in one UR, separated by spaces.
+                let mut links = v.split_whitespace();
+                let first = links.next().unwrap_or_default();
+                if r.doi.is_none() && first.to_ascii_lowercase().contains("doi.org/10.") {
                     // Keep the URL too: some readers want the link.
+                    r.doi = crate::id::doi(first);
                 }
-                set_once(&mut r.url, v)
+                let rest: Vec<&str> = links.collect();
+                if rest.is_empty() {
+                    set_once(&mut r.url, v)
+                } else {
+                    if !set_once(&mut r.url, first) {
+                        r.keep(FORMAT, tag, first);
+                    }
+                    for link in rest {
+                        r.keep(FORMAT, tag, link);
+                    }
+                    true
+                }
+            }
+            "AN" if crate::id::arxiv(v).is_some()
+                && v.trim().to_ascii_lowercase().starts_with("arxiv") =>
+            {
+                if r.arxiv.is_none() {
+                    r.arxiv = crate::id::arxiv(v);
+                }
+                set_once(&mut r.accession, v)
             }
             "AN" => {
                 let first = set_once(&mut r.accession, v);
@@ -377,9 +507,13 @@ fn to_reference(raw: RawRecord, index: usize, diags: &mut Vec<Diagnostic>) -> Re
             }
             "C2" if v.trim().to_ascii_uppercase().starts_with("PMC") && r.pmcid.is_none() => {
                 r.pmcid = non_empty(v);
-                false
+                true
             }
-            "M3" if r.pmid.is_none() && v.trim().chars().all(|c| c.is_ascii_digit()) && v.trim().len() <= 8 && hint != Some(false) => {
+            "M3" if r.pmid.is_none()
+                && v.trim().chars().all(|c| c.is_ascii_digit())
+                && v.trim().len() <= 8
+                && hint != Some(false) =>
+            {
                 r.pmid = non_empty(v);
                 false
             }
@@ -402,11 +536,31 @@ fn to_reference(raw: RawRecord, index: usize, diags: &mut Vec<Diagnostic>) -> Re
             "SO" => {
                 if looks_like_database(v) {
                     set_once(&mut r.database, v)
+                } else if let Some(so) = parse_source(v) {
+                    // Ovid MEDLINE: "Journal. 373(3):220-31, 2015 Jul 16."
+                    set_once(&mut journal_other, &so.journal);
+                    for (slot, value) in [(&mut r.volume, so.volume), (&mut r.issue, so.issue)] {
+                        if let Some(value) = value {
+                            set_once(slot, &value);
+                        }
+                    }
+                    if sp.is_none() && ep.is_none() {
+                        sp = so.page;
+                    }
+                    if py.is_none() {
+                        py = so.date.as_deref().and_then(crate::dates::parse_date);
+                    }
+                    r.keep(FORMAT, tag, v);
+                    true
                 } else {
                     set_once(&mut journal_other, v)
                 }
             }
             "M1" if r.kind == "report" => set_once(&mut r.number, v),
+            "C7" if r.kind != "report" => set_once(&mut r.number, v),
+            // Cochrane's link to the record.
+            "US" => set_once(&mut r.url, v),
+            "JI" => set_once(&mut r.container_title_short, v),
             "M3" if r.genre.is_none() && r.kind == "thesis" => set_once(&mut r.genre, v),
             _ => false,
         };
@@ -451,7 +605,9 @@ fn to_reference(raw: RawRecord, index: usize, diags: &mut Vec<Diagnostic>) -> Re
     if !notes.is_empty() {
         r.note = Some(notes.join("\n"));
     }
-    r.id = ris_id.or_else(|| r.accession.clone()).unwrap_or_else(|| (index + 1).to_string());
+    r.id = ris_id
+        .or_else(|| r.accession.clone())
+        .unwrap_or_else(|| (index + 1).to_string());
     finish(&mut r, index, Some(raw.line), diags);
     r
 }
@@ -460,9 +616,15 @@ fn to_reference(raw: RawRecord, index: usize, diags: &mut Vec<Diagnostic>) -> Re
 pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
     let raws = records(text, diags);
     if raws.is_empty() && !text.trim().is_empty() {
-        diags.push(Diagnostic::error("ris.no-records", "Found no RIS records (a record starts with a TY line)"));
+        diags.push(Diagnostic::error(
+            "ris.no-records",
+            "Found no RIS records (a record starts with a TY line)",
+        ));
     }
-    raws.into_iter().enumerate().map(|(i, raw)| to_reference(raw, i, diags)).collect()
+    raws.into_iter()
+        .enumerate()
+        .map(|(i, raw)| to_reference(raw, i, diags))
+        .collect()
 }
 
 fn push(out: &mut String, tag: &str, value: &str) {
@@ -496,7 +658,12 @@ pub fn write(refs: &[Reference]) -> String {
             .map(|f| f.value.clone())
             .unwrap_or_else(|| kind_to_ris(&r.kind).to_string());
         push(&mut out, "TY", &ty);
-        if let Some(k) = r.citation_key.as_ref().or(Some(&r.id)).filter(|k| !k.is_empty()) {
+        if let Some(k) = r
+            .citation_key
+            .as_ref()
+            .or(Some(&r.id))
+            .filter(|k| !k.is_empty())
+        {
             if r.accession.as_deref() != Some(k.as_str()) || r.citation_key.is_some() {
                 push(&mut out, "ID", k);
             }
@@ -535,15 +702,26 @@ pub fn write(refs: &[Reference]) -> String {
             push(&mut out, "J2", &one_line(c));
         }
         if let Some(c) = &r.collection_title {
-            push(&mut out, if r.kind == "book" { "T2" } else { "T3" }, &one_line(c));
+            push(
+                &mut out,
+                if r.kind == "book" { "T2" } else { "T3" },
+                &one_line(c),
+            );
         }
-        for (tag, v) in [("VL", &r.volume), ("IS", &r.issue), ("ET", &r.edition), ("PB", &r.publisher), ("CY", &r.publisher_place)] {
+        for (tag, v) in [
+            ("VL", &r.volume),
+            ("IS", &r.issue),
+            ("ET", &r.edition),
+            ("PB", &r.publisher),
+            ("CY", &r.publisher_place),
+        ] {
             if let Some(v) = v {
                 push(&mut out, tag, &one_line(v));
             }
         }
         if let Some(n) = &r.number {
-            push(&mut out, "M1", n);
+            // A report's number is M1; an article number is C7, as Scopus and Zotero write it.
+            push(&mut out, if r.kind == "report" { "M1" } else { "C7" }, n);
         }
         if let Some(p) = &r.page {
             match p.split_once('-') {
@@ -613,7 +791,6 @@ fn ris_date(d: &crate::model::Ymd) -> String {
     format!("{:04}/{m}/{day}/", d.year)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -647,30 +824,39 @@ mod tests {
 
     #[test]
     fn truncated_record_is_kept_and_reported() {
-        let (refs, diags) = read_str("TY  - JOUR\nTI  - Complete\nER  - \nTY  - JOUR\nTI  - Cut short\n");
+        let (refs, diags) =
+            read_str("TY  - JOUR\nTI  - Complete\nER  - \nTY  - JOUR\nTI  - Cut short\n");
         assert_eq!(refs.len(), 2);
         assert_eq!(refs[1].title.as_deref(), Some("Cut short"));
-        assert!(diags.iter().any(|d| d.code == "ris.missing-er" && d.line == Some(4)));
+        assert!(diags
+            .iter()
+            .any(|d| d.code == "ris.missing-er" && d.line == Some(4)));
     }
 
     #[test]
     fn continuation_lines() {
         let (refs, _) = read_str("TY  - JOUR\nTI  - A long title\n  that wraps\nAB  - First paragraph.\nSecond paragraph.\nER  - ");
         assert_eq!(refs[0].title.as_deref(), Some("A long title that wraps"));
-        assert_eq!(refs[0].abstract_text.as_deref(), Some("First paragraph.\nSecond paragraph."));
+        assert_eq!(
+            refs[0].abstract_text.as_deref(),
+            Some("First paragraph.\nSecond paragraph.")
+        );
     }
 
     #[test]
     fn orphan_text_is_reported() {
         let (refs, diags) = read_str("stray words\nTY  - JOUR\nTI  - x\nER  - \nmore stray\n");
         assert_eq!(refs.len(), 1);
-        assert_eq!(diags.iter().filter(|d| d.code == "ris.stray-text").count(), 2);
+        assert_eq!(
+            diags.iter().filter(|d| d.code == "ris.stray-text").count(),
+            2
+        );
     }
 
     #[test]
     fn accession_numbers() {
-        let (refs, _) = read_str("TY  - JOUR\nTI  - x\nAN  - 31987691\nER  - \nTY  - JOUR\nTI  - y\nAN  - 615024109\nUR  - https://www.embase.com/records/615024109\nER  - \nTY  - JOUR\nTI  - z\nAN  - 2002345\nDB  - Embase\nER  - ");
-        assert_eq!(refs[0].pmid.as_deref(), Some("31987691"));
+        let (refs, _) = read_str("TY  - JOUR\nTI  - x\nAN  - 30001202\nER  - \nTY  - JOUR\nTI  - y\nAN  - 615024109\nUR  - https://www.embase.com/records/615024109\nER  - \nTY  - JOUR\nTI  - z\nAN  - 2002345\nDB  - Embase\nER  - ");
+        assert_eq!(refs[0].pmid.as_deref(), Some("30001202"));
         assert_eq!(refs[1].pmid, None);
         assert_eq!(refs[1].accession.as_deref(), Some("615024109"));
         assert_eq!(refs[2].pmid, None);

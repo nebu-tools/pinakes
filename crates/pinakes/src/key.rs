@@ -12,14 +12,19 @@ use std::collections::HashSet;
 /// Words skipped when picking the title word: articles, prepositions and conjunctions in the
 /// languages exports most often carry.
 const STOP_WORDS: &[&str] = &[
-    "a", "an", "the", "of", "on", "in", "at", "to", "for", "from", "by", "with", "and", "or", "but", "as", "is", "are", "was", "were", "be", "into", "onto", "over",
-    "under", "about", "via", "vs", "versus", "its", "it", "this", "that", "these", "those", "how", "what", "why", "when", "where", "which", "who", "do", "does", "not",
-    "der", "die", "das", "ein", "eine", "und", "zur", "zum", "im", "le", "la", "les", "un", "une", "des", "du", "de", "et", "el", "los", "las", "y", "il", "lo", "gli",
-    "di", "da", "het", "een", "en", "van",
+    "a", "an", "the", "of", "on", "in", "at", "to", "for", "from", "by", "with", "and", "or",
+    "but", "as", "is", "are", "was", "were", "be", "into", "onto", "over", "under", "about", "via",
+    "vs", "versus", "its", "it", "this", "that", "these", "those", "how", "what", "why", "when",
+    "where", "which", "who", "do", "does", "not", "der", "die", "das", "ein", "eine", "und", "zur",
+    "zum", "im", "le", "la", "les", "un", "une", "des", "du", "de", "et", "el", "los", "las", "y",
+    "il", "lo", "gli", "di", "da", "het", "een", "en", "van",
 ];
 
 fn word_part(s: &str) -> String {
-    fold_for_key(s).chars().filter(|c| c.is_ascii_alphanumeric()).collect()
+    fold_for_key(s)
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .collect()
 }
 
 /// The key a reference would get with no collisions.
@@ -30,7 +35,11 @@ pub fn key_for(r: &Reference) -> String {
         .or(r.editor.first())
         .map(|n| match (&n.literal, &n.family) {
             // An organisation: its first significant word.
-            (Some(l), _) => l.split_whitespace().map(word_part).find(|w| !w.is_empty() && !STOP_WORDS.contains(&w.as_str())).unwrap_or_default(),
+            (Some(l), _) => l
+                .split_whitespace()
+                .map(word_part)
+                .find(|w| !w.is_empty() && !STOP_WORDS.contains(&w.as_str()))
+                .unwrap_or_default(),
             (None, Some(f)) => {
                 let fam = match &n.particle {
                     Some(p) => format!("{p}{f}"),
@@ -47,13 +56,23 @@ pub fn key_for(r: &Reference) -> String {
         .as_deref()
         .map(crate::text::strip_markup)
         .map(|t| {
-            t.split(|c: char| c.is_whitespace() || matches!(c, '-' | '\u{2010}'..='\u{2015}' | '/' | ':' | '.' | ',' | ';'))
-                .map(word_part)
-                .find(|w| !w.is_empty() && !STOP_WORDS.contains(&w.as_str()))
-                .unwrap_or_default()
+            t.split(|c: char| {
+                c.is_whitespace()
+                    || matches!(
+                        c,
+                        '-' | '\u{2010}'..='\u{2015}' | '/' | ':' | '.' | ',' | ';'
+                    )
+            })
+            .map(word_part)
+            .find(|w| !w.is_empty() && !STOP_WORDS.contains(&w.as_str()))
+            .unwrap_or_default()
         })
         .unwrap_or_default();
-    let who = if who.is_empty() && title.is_empty() { "anon".to_string() } else { who };
+    let who = if who.is_empty() && title.is_empty() {
+        "anon".to_string()
+    } else {
+        who
+    };
     let key = format!("{who}{year}{title}");
     if key.starts_with(|c: char| c.is_ascii_digit()) {
         format!("k{key}")
@@ -109,7 +128,12 @@ fn keys(refs: &[Reference], replace: bool) -> Vec<String> {
     let mut out: Vec<Option<String>> = vec![None; refs.len()];
     if !replace {
         for (i, r) in refs.iter().enumerate() {
-            if let Some(k) = r.citation_key.as_deref().map(str::trim).filter(|k| !k.is_empty()) {
+            if let Some(k) = r
+                .citation_key
+                .as_deref()
+                .map(str::trim)
+                .filter(|k| !k.is_empty())
+            {
                 // A repeated key is a collision too; the later record gets a suffix.
                 if taken.insert(k.to_string()) {
                     out[i] = Some(k.to_string());
@@ -119,7 +143,12 @@ fn keys(refs: &[Reference], replace: bool) -> Vec<String> {
     }
     for (i, r) in refs.iter().enumerate() {
         if out[i].is_none() {
-            let base = match r.citation_key.as_deref().map(str::trim).filter(|k| !k.is_empty() && !replace) {
+            let base = match r
+                .citation_key
+                .as_deref()
+                .map(str::trim)
+                .filter(|k| !k.is_empty() && !replace)
+            {
                 Some(k) => k.to_string(),
                 None => key_for(r),
             };
@@ -135,27 +164,49 @@ mod tests {
     use crate::model::{Date, Name};
 
     fn r(family: &str, year: i32, title: &str) -> Reference {
-        Reference { author: vec![Name::person(family, Some("A."))], issued: Some(Date::year(year)), title: Some(title.into()), ..Reference::default() }
+        Reference {
+            author: vec![Name::person(family, Some("A."))],
+            issued: Some(Date::year(year)),
+            title: Some(title.into()),
+            ..Reference::default()
+        }
     }
 
     #[test]
     fn keys() {
-        assert_eq!(key_for(&r("Okafor", 2019, "The moths of the forest edge")), "okafor2019moths");
-        assert_eq!(key_for(&r("Ødegård", 2001, "À la recherche")), "odegaard2001recherche");
+        assert_eq!(
+            key_for(&r("Okafor", 2019, "The moths of the forest edge")),
+            "okafor2019moths"
+        );
+        assert_eq!(
+            key_for(&r("Ødegård", 2001, "À la recherche")),
+            "odegaard2001recherche"
+        );
         let mut p = r("Berg", 1999, "Über <i>Lepidoptera</i>");
         p.author[0].particle = Some("van den".into());
         assert_eq!(key_for(&p), "vandenberg1999ueber");
-        let org = Reference { author: vec![Name::literal("The Coastal Survey")], title: Some("Report".into()), ..Reference::default() };
+        let org = Reference {
+            author: vec![Name::literal("The Coastal Survey")],
+            title: Some("Report".into()),
+            ..Reference::default()
+        };
         assert_eq!(key_for(&org), "coastalreport");
         assert_eq!(key_for(&Reference::default()), "anon");
     }
 
     #[test]
     fn collisions_and_overrides() {
-        let mut refs = vec![r("Lind", 2020, "Tide pools"), r("Lind", 2020, "Tide pools again"), r("Lind", 2020, "Tide")];
+        let mut refs = vec![
+            r("Lind", 2020, "Tide pools"),
+            r("Lind", 2020, "Tide pools again"),
+            r("Lind", 2020, "Tide"),
+        ];
         refs[2].citation_key = Some("mine".into());
         assign_keys(&mut refs, false);
-        let k: Vec<_> = refs.iter().map(|r| r.citation_key.clone().unwrap()).collect();
+        let k: Vec<_> = refs
+            .iter()
+            .map(|r| r.citation_key.clone().unwrap())
+            .collect();
         assert_eq!(k, ["lind2020tide", "lind2020tidea", "mine"]);
         assign_keys(&mut refs, true);
         assert_eq!(refs[2].citation_key.as_deref(), Some("lind2020tideb"));

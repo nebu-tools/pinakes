@@ -4,16 +4,78 @@ use crate::model::Name;
 
 /// Words that mark a name as an organisation rather than a person.
 const CORPORATE: &[&str] = &[
-    "academy", "agency", "association", "board", "bureau", "center", "centre", "college",
-    "collaboration", "collaborators", "commission", "committee", "consortium", "council",
-    "department", "federation", "foundation", "group", "inc", "initiative", "institute",
-    "institution", "laboratory", "league", "ltd", "ministry", "museum", "network", "office",
-    "organisation", "organization", "programme", "program", "project", "service", "services",
-    "society", "survey", "team", "trust", "union", "university", "observatory", "library",
-    "archive", "archives", "school", "gmbh", "ag", "llc", "plc", "institut", "universität",
-    "universitat", "université", "universite", "universidad", "universidade", "università",
-    "gesellschaft", "verein", "instituto", "istituto", "stiftung", "hospital", "clinic",
-    "authority", "corporation", "company", "co", "partners", "working",
+    "academy",
+    "agency",
+    "association",
+    "board",
+    "bureau",
+    "center",
+    "centre",
+    "college",
+    "collaboration",
+    "collaborators",
+    "commission",
+    "committee",
+    "consortium",
+    "council",
+    "department",
+    "federation",
+    "foundation",
+    "group",
+    "inc",
+    "initiative",
+    "institute",
+    "institution",
+    "laboratory",
+    "league",
+    "ltd",
+    "ministry",
+    "museum",
+    "network",
+    "office",
+    "organisation",
+    "organization",
+    "programme",
+    "program",
+    "project",
+    "service",
+    "services",
+    "society",
+    "survey",
+    "team",
+    "trust",
+    "union",
+    "university",
+    "observatory",
+    "library",
+    "archive",
+    "archives",
+    "school",
+    "gmbh",
+    "ag",
+    "llc",
+    "plc",
+    "institut",
+    "universität",
+    "universitat",
+    "université",
+    "universite",
+    "universidad",
+    "universidade",
+    "università",
+    "gesellschaft",
+    "verein",
+    "instituto",
+    "istituto",
+    "stiftung",
+    "hospital",
+    "clinic",
+    "authority",
+    "corporation",
+    "company",
+    "co",
+    "partners",
+    "working",
 ];
 
 /// Lower-case words that start a family name (non-dropping particles).
@@ -22,7 +84,9 @@ const PARTICLES: &[&str] = &[
     "ten", "ter", "zu", "zur", "af", "av", "y", "bin", "ibn", "al", "el", "d'", "l'", "st",
 ];
 
-const SUFFIXES: &[&str] = &["jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v", "2nd", "3rd"];
+const SUFFIXES: &[&str] = &[
+    "jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v", "2nd", "3rd",
+];
 
 /// Whether a comma-free name string reads as an organisation.
 pub fn looks_corporate(s: &str) -> bool {
@@ -38,7 +102,9 @@ pub fn is_initials(token: &str) -> bool {
         return false;
     }
     let all_upper = letters.iter().all(|c| c.is_uppercase());
-    let only_marks = token.chars().all(|c| c.is_alphabetic() || matches!(c, '.' | '-' | '\u{2010}'));
+    let only_marks = token
+        .chars()
+        .all(|c| c.is_alphabetic() || matches!(c, '.' | '-' | '\u{2010}'));
     if !all_upper || !only_marks {
         return false;
     }
@@ -81,7 +147,8 @@ fn split_particle(family: &str) -> (Option<String>, String) {
 }
 
 fn is_particle(word: &str) -> bool {
-    word.chars().next().is_some_and(|c| c.is_lowercase()) && (PARTICLES.contains(&word) || word.len() <= 4)
+    word.chars().next().is_some_and(|c| c.is_lowercase())
+        && (PARTICLES.contains(&word) || word.len() <= 4)
 }
 
 fn clean_given(given: &str) -> Option<String> {
@@ -101,7 +168,10 @@ fn person(family: &str, given: Option<&str>, suffix: Option<&str>) -> Name {
         family: Some(family),
         given: given.and_then(clean_given),
         particle,
-        suffix: suffix.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string),
+        suffix: suffix
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
         ..Name::default()
     }
 }
@@ -121,7 +191,10 @@ pub fn parse_name(input: &str) -> Name {
     }
     if s.contains(',') {
         let parts: Vec<&str> = s.split(',').map(str::trim).collect();
-        if parts.len() > 3 || parts[0].is_empty() || parts[1..].iter().any(|p| p.split_whitespace().count() > 4) {
+        if parts.len() > 3
+            || parts[0].is_empty()
+            || parts[1..].iter().any(|p| p.split_whitespace().count() > 4)
+        {
             return Name::literal(&s);
         }
         let (given, suffix) = match parts.len() {
@@ -141,15 +214,22 @@ pub fn parse_name(input: &str) -> Name {
     }
     let words: Vec<&str> = s.split(' ').collect();
     if words.len() == 1 {
-        return Name { family: Some(s), ..Name::default() };
+        return Name {
+            family: Some(s),
+            ..Name::default()
+        };
     }
     let last = words[words.len() - 1];
     if is_initials(last) && !is_initials(words[0]) {
         // Vancouver: "Smith JA", "van der Berg J", "Konstan M.W.".
         return person(&words[..words.len() - 1].join(" "), Some(last), None);
     }
-    if words.iter().all(|w| w.chars().next().is_some_and(|c| c.is_uppercase() || !c.is_alphabetic()) || is_particle(w))
-        && words.len() <= 4
+    if words.iter().all(|w| {
+        w.chars()
+            .next()
+            .is_some_and(|c| c.is_uppercase() || !c.is_alphabetic())
+            || is_particle(w)
+    }) && words.len() <= 4
     {
         // "Ludwig van Beethoven", "J. R. R. Tolkien".
         return given_family(&words);
@@ -163,10 +243,16 @@ pub fn given_family(words: &[&str]) -> Name {
         return Name::default();
     }
     if words.len() == 1 {
-        return Name { family: Some(words[0].to_string()), ..Name::default() };
+        return Name {
+            family: Some(words[0].to_string()),
+            ..Name::default()
+        };
     }
     // The particle is the first run of lower-case words after the first word.
-    let start = words[1..].iter().position(|w| is_particle(w)).map(|p| p + 1);
+    let start = words[1..]
+        .iter()
+        .position(|w| is_particle(w))
+        .map(|p| p + 1);
     match start {
         Some(p) if p < words.len() - 1 => {
             let mut end = p;
@@ -196,9 +282,18 @@ pub fn split_name_list(s: &str) -> Vec<String> {
         return Vec::new();
     }
     if s.contains(';') || s.contains('\n') {
-        return s.split([';', '\n']).map(str::trim).filter(|p| !p.is_empty()).map(str::to_string).collect();
+        return s
+            .split([';', '\n'])
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .map(str::to_string)
+            .collect();
     }
-    let parts: Vec<&str> = s.split(',').map(str::trim).filter(|p| !p.is_empty()).collect();
+    let parts: Vec<&str> = s
+        .split(',')
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .collect();
     // Vancouver: every comma-separated part ends in initials.
     if parts.len() > 1
         && parts.iter().all(|p| {
@@ -216,7 +311,10 @@ mod tests {
     use super::*;
 
     fn fam(n: &Name) -> (&str, &str) {
-        (n.family.as_deref().unwrap_or(""), n.given.as_deref().unwrap_or(""))
+        (
+            n.family.as_deref().unwrap_or(""),
+            n.given.as_deref().unwrap_or(""),
+        )
     }
 
     #[test]
@@ -225,14 +323,26 @@ mod tests {
         assert_eq!(fam(&parse_name("Konstan, M.W.")), ("Konstan", "M. W."));
         assert_eq!(fam(&parse_name("Konstan M.W.")), ("Konstan", "M. W."));
         assert_eq!(fam(&parse_name("Smith JA")), ("Smith", "J. A."));
-        assert_eq!(fam(&parse_name("Turner, Nicholas C.")), ("Turner", "Nicholas C."));
+        assert_eq!(
+            fam(&parse_name("Turner, Nicholas C.")),
+            ("Turner", "Nicholas C.")
+        );
         assert_eq!(fam(&parse_name("Gabler")), ("Gabler", ""));
         let n = parse_name("van der Berg, Jan");
-        assert_eq!((n.particle.as_deref(), fam(&n)), (Some("van der"), ("Berg", "Jan")));
+        assert_eq!(
+            (n.particle.as_deref(), fam(&n)),
+            (Some("van der"), ("Berg", "Jan"))
+        );
         let n = parse_name("Ludwig van Beethoven");
-        assert_eq!((n.particle.as_deref(), fam(&n)), (Some("van"), ("Beethoven", "Ludwig")));
+        assert_eq!(
+            (n.particle.as_deref(), fam(&n)),
+            (Some("van"), ("Beethoven", "Ludwig"))
+        );
         let n = parse_name("King, Martin Luther, Jr.");
-        assert_eq!((n.suffix.as_deref(), fam(&n)), (Some("Jr."), ("King", "Martin Luther")));
+        assert_eq!(
+            (n.suffix.as_deref(), fam(&n)),
+            (Some("Jr."), ("King", "Martin Luther"))
+        );
     }
 
     #[test]
@@ -249,8 +359,14 @@ mod tests {
 
     #[test]
     fn lists() {
-        assert_eq!(split_name_list("Smith J, Doe AB"), vec!["Smith J", "Doe AB"]);
-        assert_eq!(split_name_list("Smith, J.; Doe, A."), vec!["Smith, J.", "Doe, A."]);
+        assert_eq!(
+            split_name_list("Smith J, Doe AB"),
+            vec!["Smith J", "Doe AB"]
+        );
+        assert_eq!(
+            split_name_list("Smith, J.; Doe, A."),
+            vec!["Smith, J.", "Doe, A."]
+        );
         assert_eq!(split_name_list("Smith, Jane"), vec!["Smith, Jane"]);
     }
 }

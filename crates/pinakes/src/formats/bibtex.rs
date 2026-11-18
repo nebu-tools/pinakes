@@ -82,7 +82,12 @@ impl<'a> Lexer<'a> {
                     self.i += 1;
                     return Ok(&self.src[start + 1..self.i - 1]);
                 }
-            } else if c == b'@' && open == b'{' && depth <= 1 && self.at_line_start(self.i) && self.looks_like_entry(self.i) {
+            } else if c == b'@'
+                && open == b'{'
+                && depth <= 1
+                && self.at_line_start(self.i)
+                && self.looks_like_entry(self.i)
+            {
                 break;
             }
             self.i += 1;
@@ -98,7 +103,11 @@ impl<'a> Lexer<'a> {
     fn looks_like_entry(&self, at: usize) -> bool {
         let rest = &self.b[at + 1..];
         let n = rest.iter().take_while(|c| c.is_ascii_alphabetic()).count();
-        n > 0 && rest[n..].iter().find(|c| !c.is_ascii_whitespace()).is_some_and(|c| *c == b'{' || *c == b'(')
+        n > 0
+            && rest[n..]
+                .iter()
+                .find(|c| !c.is_ascii_whitespace())
+                .is_some_and(|c| *c == b'{' || *c == b'(')
     }
 
     fn quoted(&mut self) -> Result<&'a str, Broken> {
@@ -120,12 +129,21 @@ impl<'a> Lexer<'a> {
             self.i += 1;
         }
         self.i = self.i.min(self.b.len());
-        Err(Broken("bibtex.unclosed-quote", "a quoted value is not closed", start))
+        Err(Broken(
+            "bibtex.unclosed-quote",
+            "a quoted value is not closed",
+            start,
+        ))
     }
 
     fn bare(&mut self) -> &'a str {
         let start = self.i;
-        while self.i < self.b.len() && !matches!(self.b[self.i], b' ' | b'\t' | b'\n' | b'\r' | b',' | b'#' | b'}' | b')' | b'=' | b'"' | b'{') {
+        while self.i < self.b.len()
+            && !matches!(
+                self.b[self.i],
+                b' ' | b'\t' | b'\n' | b'\r' | b',' | b'#' | b'}' | b')' | b'=' | b'"' | b'{'
+            )
+        {
             self.i += 1;
         }
         &self.src[start..self.i]
@@ -153,13 +171,22 @@ impl<'a> Lexer<'a> {
                         out.push_str(m);
                     } else {
                         diags.push(
-                            Diagnostic::warning("bibtex.unknown-macro", format!("@string macro {word:?} is not defined; kept its name"))
-                                .at(self.line(at)),
+                            Diagnostic::warning(
+                                "bibtex.unknown-macro",
+                                format!("@string macro {word:?} is not defined; kept its name"),
+                            )
+                            .at(self.line(at)),
                         );
                         out.push_str(word);
                     }
                 }
-                None => return Err(Broken("bibtex.no-value", "the file ends inside a field", self.i)),
+                None => {
+                    return Err(Broken(
+                        "bibtex.no-value",
+                        "the file ends inside a field",
+                        self.i,
+                    ))
+                }
             }
             self.ws();
             if self.peek() == Some(b'#') {
@@ -172,7 +199,23 @@ impl<'a> Lexer<'a> {
 
     fn name(&mut self) -> &'a str {
         let start = self.i;
-        while self.i < self.b.len() && !matches!(self.b[self.i], b' ' | b'\t' | b'\n' | b'\r' | b',' | b'=' | b'{' | b'}' | b'(' | b')' | b'"' | b'#' | b'%') {
+        while self.i < self.b.len()
+            && !matches!(
+                self.b[self.i],
+                b' ' | b'\t'
+                    | b'\n'
+                    | b'\r'
+                    | b','
+                    | b'='
+                    | b'{'
+                    | b'}'
+                    | b'('
+                    | b')'
+                    | b'"'
+                    | b'#'
+                    | b'%'
+            )
+        {
             self.i += 1;
         }
         &self.src[start..self.i]
@@ -223,16 +266,28 @@ impl<'a> Lexer<'a> {
             match kind.as_str() {
                 "comment" => {
                     if self.balanced(open, close).is_err() {
-                        diags.push(Diagnostic::warning("bibtex.unclosed", "An @comment is not closed").at(self.line(at)));
+                        diags.push(
+                            Diagnostic::warning("bibtex.unclosed", "An @comment is not closed")
+                                .at(self.line(at)),
+                        );
                         self.resync();
                     }
                     continue;
                 }
                 "preamble" => {
                     match self.balanced(open, close) {
-                        Ok(_) => diags.push(Diagnostic::info("bibtex.preamble", "Skipped an @preamble").at(self.line(at))),
+                        Ok(_) => diags.push(
+                            Diagnostic::info("bibtex.preamble", "Skipped an @preamble")
+                                .at(self.line(at)),
+                        ),
                         Err(_) => {
-                            diags.push(Diagnostic::warning("bibtex.unclosed", "An @preamble is not closed").at(self.line(at)));
+                            diags.push(
+                                Diagnostic::warning(
+                                    "bibtex.unclosed",
+                                    "An @preamble is not closed",
+                                )
+                                .at(self.line(at)),
+                            );
                             self.resync();
                         }
                     }
@@ -255,7 +310,10 @@ impl<'a> Lexer<'a> {
                             }
                         }
                         Err(Broken(code, msg, pos)) => {
-                            diags.push(Diagnostic::error(code, format!("In @string {name:?}, {msg}")).at(self.line(pos)));
+                            diags.push(
+                                Diagnostic::error(code, format!("In @string {name:?}, {msg}"))
+                                    .at(self.line(pos)),
+                            );
                             self.resync();
                         }
                     }
@@ -266,18 +324,32 @@ impl<'a> Lexer<'a> {
             self.i += 1;
             self.ws();
             let key_start = self.i;
-            while self.i < self.b.len() && !matches!(self.b[self.i], b',' | b'\n' | b'\r' | b' ' | b'\t') && self.b[self.i] != close {
+            while self.i < self.b.len()
+                && !matches!(self.b[self.i], b',' | b'\n' | b'\r' | b' ' | b'\t')
+                && self.b[self.i] != close
+            {
                 self.i += 1;
             }
             let key = self.src[key_start..self.i].to_string();
-            let mut entry = Entry { kind, key, line: self.line(at), fields: Vec::new() };
+            let mut entry = Entry {
+                kind,
+                key,
+                line: self.line(at),
+                fields: Vec::new(),
+            };
             loop {
                 self.ws();
                 match self.peek() {
                     None => {
                         diags.push(
-                            Diagnostic::error("bibtex.unclosed", format!("Entry {:?} is not closed; kept the fields before the end", entry.key))
-                                .at(entry.line),
+                            Diagnostic::error(
+                                "bibtex.unclosed",
+                                format!(
+                                    "Entry {:?} is not closed; kept the fields before the end",
+                                    entry.key
+                                ),
+                            )
+                            .at(entry.line),
                         );
                         break;
                     }
@@ -362,7 +434,11 @@ fn looks_like_lost_fields(text: &str) -> bool {
     text.lines().any(|l| {
         let l = l.trim();
         l.split_once('=').is_some_and(|(k, v)| {
-            !k.trim().is_empty() && k.trim().chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') && v.trim_start().starts_with(['{', '"'])
+            !k.trim().is_empty()
+                && k.trim()
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                && v.trim_start().starts_with(['{', '"'])
         })
     })
 }
@@ -389,7 +465,8 @@ fn month_macro(word: &str) -> Option<&'static str> {
 pub fn kind_from_bib(t: &str) -> &'static str {
     match t {
         "article" => "article-journal",
-        "book" | "mvbook" | "collection" | "mvcollection" | "proceedings" | "mvproceedings" | "reference" | "mvreference" => "book",
+        "book" | "mvbook" | "collection" | "mvcollection" | "proceedings" | "mvproceedings"
+        | "reference" | "mvreference" => "book",
         "booklet" => "pamphlet",
         "inbook" | "incollection" | "bookinbook" | "suppbook" | "suppcollection" => "chapter",
         "inproceedings" | "conference" => "paper-conference",
@@ -418,14 +495,23 @@ pub fn kind_from_bib(t: &str) -> &'static str {
 /// CSL type to entry type. BibLaTeX has more types than BibTeX.
 pub fn kind_to_bib(kind: &str, biblatex: bool) -> &'static str {
     match (kind, biblatex) {
-        ("article-journal" | "article-magazine" | "article-newspaper" | "review" | "review-book", _) => "article",
+        (
+            "article-journal" | "article-magazine" | "article-newspaper" | "review" | "review-book",
+            _,
+        ) => "article",
         ("book", _) => "book",
         ("pamphlet", _) => "booklet",
         ("chapter", false) => "incollection",
         ("chapter", true) => "incollection",
         ("paper-conference", _) => "inproceedings",
         ("entry-encyclopedia" | "entry-dictionary" | "entry", true) => "inreference",
-        ("report", _) => if biblatex { "report" } else { "techreport" },
+        ("report", _) => {
+            if biblatex {
+                "report"
+            } else {
+                "techreport"
+            }
+        }
         ("thesis", true) => "thesis",
         ("thesis", false) => "phdthesis",
         ("webpage" | "post-weblog" | "post", true) => "online",
@@ -470,7 +556,10 @@ fn split_and(s: &str) -> Vec<String> {
         cur.push_str(w);
     }
     out.push(cur);
-    out.into_iter().map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
+    out.into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 /// Split on commas at brace depth 0.
@@ -530,14 +619,20 @@ fn is_von(word: &str) -> bool {
                 if depth == 1 && chars.peek() == Some(&'\\') {
                     let inner: String = chars.clone().take_while(|&c| c != '}').collect();
                     let text = latex_to_text(&inner);
-                    return text.chars().find(|c| c.is_alphabetic()).is_some_and(|c| c.is_lowercase());
+                    return text
+                        .chars()
+                        .find(|c| c.is_alphabetic())
+                        .is_some_and(|c| c.is_lowercase());
                 }
             }
             '}' => depth -= 1,
             '\\' if depth == 0 => {
                 let rest: String = chars.clone().collect();
                 let text = latex_to_text(&format!("\\{rest}"));
-                return text.chars().find(|c| c.is_alphabetic()).is_some_and(|c| c.is_lowercase());
+                return text
+                    .chars()
+                    .find(|c| c.is_alphabetic())
+                    .is_some_and(|c| c.is_lowercase());
             }
             c if c.is_alphabetic() && depth == 0 => return c.is_lowercase(),
             _ => {}
@@ -562,7 +657,10 @@ pub fn bib_name(raw: &str) -> Name {
     let (vonlast, first, jr) = match parts.len() {
         1 => {
             let words = split_words(&parts[0]);
-            if words.len() > 1 && looks_corporate(&latex_to_text(raw)) && !words.iter().any(|w| is_von(w)) {
+            if words.len() > 1
+                && looks_corporate(&latex_to_text(raw))
+                && !words.iter().any(|w| is_von(w))
+            {
                 return Name::literal(&latex_to_text(raw));
             }
             // First von Last: von starts at the first lower-case word that is not the last word.
@@ -599,7 +697,11 @@ pub fn bib_name(raw: &str) -> Name {
             }
         }
         2 => (parts[0].clone(), parts[1].clone(), String::new()),
-        _ => (parts[0].clone(), parts[parts.len() - 1].clone(), parts[1].clone()),
+        _ => (
+            parts[0].clone(),
+            parts[parts.len() - 1].clone(),
+            parts[1].clone(),
+        ),
     };
     let words = split_words(&vonlast);
     let n = words.len();
@@ -611,7 +713,12 @@ pub fn bib_name(raw: &str) -> Name {
             break;
         }
     }
-    make(&first, &words[..von_end].join(" "), &words[von_end..].join(" "), &jr)
+    make(
+        &first,
+        &words[..von_end].join(" "),
+        &words[von_end..].join(" "),
+        &jr,
+    )
 }
 
 fn balanced_whole(s: &str) -> bool {
@@ -659,7 +766,10 @@ fn bib_date(v: &str) -> Option<Date> {
     let t = v.trim();
     let circa = t.contains(['~', '\u{a0}', '%']);
     let uncertain = t.contains('?');
-    let cleaned: String = t.chars().filter(|c| !matches!(c, '~' | '\u{a0}' | '?' | '%')).collect();
+    let cleaned: String = t
+        .chars()
+        .filter(|c| !matches!(c, '~' | '\u{a0}' | '?' | '%'))
+        .collect();
     let cleaned = cleaned.trim_end_matches("/..").trim_start_matches("../");
     let mut d = parse_date(cleaned)?;
     d.circa |= circa;
@@ -670,15 +780,32 @@ fn bib_date(v: &str) -> Option<Date> {
 }
 
 fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Reference {
-    let mut r = Reference { kind: kind_from_bib(&e.kind).to_string(), ..Reference::default() };
+    let mut r = Reference {
+        kind: kind_from_bib(&e.kind).to_string(),
+        ..Reference::default()
+    };
     if kind_to_bib(&r.kind, true) != e.kind && kind_to_bib(&r.kind, false) != e.kind {
         r.keep(FORMAT, "@type", &e.kind);
     }
     if r.kind == "document" && !matches!(e.kind.as_str(), "misc") {
-        diags.push(Diagnostic::info("bibtex.unknown-type", format!("Entry type @{} has no CSL type; read it as a document", e.kind)).at(e.line).record(index));
+        diags.push(
+            Diagnostic::info(
+                "bibtex.unknown-type",
+                format!(
+                    "Entry type @{} has no CSL type; read it as a document",
+                    e.kind
+                ),
+            )
+            .at(e.line)
+            .record(index),
+        );
     }
     if e.key.is_empty() {
-        diags.push(Diagnostic::warning("bibtex.no-key", "An entry has no citation key").at(e.line).record(index));
+        diags.push(
+            Diagnostic::warning("bibtex.no-key", "An entry has no citation key")
+                .at(e.line)
+                .record(index),
+        );
     } else {
         r.citation_key = Some(e.key.clone());
     }
@@ -705,7 +832,9 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
         used.push(k);
         Some(v.clone())
     };
-    let eprinttype = take("eprinttype").or_else(|| take("archiveprefix")).map(|s| s.trim().to_ascii_lowercase());
+    let eprinttype = take("eprinttype")
+        .or_else(|| take("archiveprefix"))
+        .map(|s| s.trim().to_ascii_lowercase());
     let eprint = take("eprint");
     r.title = take("title").and_then(|t| txt(&t));
     if let Some(sub) = take("subtitle").and_then(|s| txt(&s)) {
@@ -732,7 +861,10 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
     if r.container_title.is_none() {
         r.container_title = take("maintitle").and_then(|t| txt(&t));
     }
-    r.container_title_short = take("shortjournal").or_else(|| take("journalabbr")).or_else(|| take("journal-abbreviation")).and_then(|t| txt(&t));
+    r.container_title_short = take("shortjournal")
+        .or_else(|| take("journalabbr"))
+        .or_else(|| take("journal-abbreviation"))
+        .and_then(|t| txt(&t));
     r.collection_title = take("series").and_then(|t| txt(&t));
     r.volume = take("volume").and_then(|t| txt(&t));
     let number = take("number").and_then(|t| txt(&t));
@@ -747,8 +879,13 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
     let publisher = take("publisher");
     let institution = take("institution").or_else(|| take("school"));
     let organization = take("organization");
-    r.publisher = publisher.or(institution).or(organization).and_then(|t| txt(&t));
-    r.publisher_place = take("location").or_else(|| take("address")).and_then(|t| txt(&t));
+    r.publisher = publisher
+        .or(institution)
+        .or(organization)
+        .and_then(|t| txt(&t));
+    r.publisher_place = take("location")
+        .or_else(|| take("address"))
+        .and_then(|t| txt(&t));
     r.edition = take("edition").and_then(|t| txt(&t));
     r.genre = take("type").and_then(|t| txt(&t));
     if r.genre.is_none() {
@@ -760,11 +897,20 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
     }
     r.abstract_text = take("abstract").and_then(|t| txt(&t));
     r.note = take("note").and_then(|t| txt(&t));
-    r.language = take("langid").or_else(|| take("language")).and_then(|t| txt(&t));
+    r.language = take("langid")
+        .or_else(|| take("language"))
+        .and_then(|t| txt(&t));
     if let Some(k) = take("keywords") {
-        r.keywords = latex_to_text(&k).split([',', ';']).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect();
+        r.keywords = latex_to_text(&k)
+            .split([',', ';'])
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect();
     }
-    r.url = take("url").map(|u| u.trim().to_string()).filter(|u| !u.is_empty());
+    r.url = take("url")
+        .map(|u| u.trim().to_string())
+        .filter(|u| !u.is_empty());
     if r.url.is_none() {
         if let Some(h) = get.get("howpublished") {
             if let Some(u) = h.split("\\url{").nth(1).and_then(|s| s.split('}').next()) {
@@ -783,7 +929,9 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
             Some("pubmed") => r.pmid = r.pmid.take().or(Some(ep.trim().to_string())),
             Some("pmcid") | Some("pmc") => r.pmcid = r.pmcid.take().or(Some(ep.trim().to_string())),
             Some("doi") => r.doi = r.doi.take().or(Some(ep.trim().to_string())),
-            _ if ep.trim().to_ascii_lowercase().starts_with("arxiv:") => r.arxiv = Some(ep.trim().to_string()),
+            _ if ep.trim().to_ascii_lowercase().starts_with("arxiv:") => {
+                r.arxiv = Some(ep.trim().to_string())
+            }
             other => {
                 r.keep(FORMAT, "eprint", &ep);
                 if let Some(t) = other {
@@ -799,7 +947,11 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
                 x
             });
             if parsed.is_none() {
-                diags.push(Diagnostic::warning("bibtex.bad-date", format!("Could not read date {d:?}")).at(e.line).record(index));
+                diags.push(
+                    Diagnostic::warning("bibtex.bad-date", format!("Could not read date {d:?}"))
+                        .at(e.line)
+                        .record(index),
+                );
             }
             parsed
         }
@@ -812,7 +964,12 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
                     Some(mut d) => {
                         if let (Some(start), Some(m)) = (d.start.as_mut(), month.as_deref()) {
                             if start.month.is_none() {
-                                let n = m.trim().parse::<u8>().ok().filter(|n| (1..=12).contains(n)).or_else(|| month_number(m.trim()));
+                                let n = m
+                                    .trim()
+                                    .parse::<u8>()
+                                    .ok()
+                                    .filter(|n| (1..=12).contains(n))
+                                    .or_else(|| month_number(m.trim()));
                                 start.month = n;
                                 start.day = n.and(day);
                                 if n.is_none() {
@@ -822,7 +979,10 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
                         }
                         Some(d)
                     }
-                    None => Some(Date { literal: Some(y), ..Date::default() }),
+                    None => Some(Date {
+                        literal: Some(y),
+                        ..Date::default()
+                    }),
                 }
             }
             None => None,
@@ -840,19 +1000,35 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
             r.keep(FORMAT, &name, v);
         }
     }
-    r.id = r.citation_key.clone().unwrap_or_else(|| (index + 1).to_string());
+    r.id = r
+        .citation_key
+        .clone()
+        .unwrap_or_else(|| (index + 1).to_string());
     finish(&mut r, index, Some(e.line), diags);
     r
 }
 
 /// Read BibTeX or BibLaTeX.
 pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
-    let mut lx = Lexer { src: text, b: text.as_bytes(), i: 0, lines: LineIndex::new(text), strings: HashMap::new() };
+    let mut lx = Lexer {
+        src: text,
+        b: text.as_bytes(),
+        i: 0,
+        lines: LineIndex::new(text),
+        strings: HashMap::new(),
+    };
     let entries = lx.entries(diags);
     if entries.is_empty() && !text.trim().is_empty() {
-        diags.push(Diagnostic::error("bibtex.no-entries", "Found no BibTeX entries (an entry starts with @type{key,)"));
+        diags.push(Diagnostic::error(
+            "bibtex.no-entries",
+            "Found no BibTeX entries (an entry starts with @type{key,)",
+        ));
     }
-    entries.into_iter().enumerate().map(|(i, e)| to_reference(e, i, diags)).collect()
+    entries
+        .into_iter()
+        .enumerate()
+        .map(|(i, e)| to_reference(e, i, diags))
+        .collect()
 }
 
 fn write_name(n: &Name, ascii: bool) -> String {
@@ -930,22 +1106,49 @@ pub fn write(refs: &[Reference], biblatex: bool) -> String {
             add("shorttitle", text_to_latex(v, ascii, true));
         }
         if !r.author.is_empty() {
-            add("author", r.author.iter().map(|n| write_name(n, ascii)).collect::<Vec<_>>().join(" and "));
+            add(
+                "author",
+                r.author
+                    .iter()
+                    .map(|n| write_name(n, ascii))
+                    .collect::<Vec<_>>()
+                    .join(" and "),
+            );
         }
         if !r.editor.is_empty() {
-            add("editor", r.editor.iter().map(|n| write_name(n, ascii)).collect::<Vec<_>>().join(" and "));
+            add(
+                "editor",
+                r.editor
+                    .iter()
+                    .map(|n| write_name(n, ascii))
+                    .collect::<Vec<_>>()
+                    .join(" and "),
+            );
         }
         if let Some(c) = &r.container_title {
             let name = match (ty.as_str(), biblatex) {
                 ("article" | "periodical", true) => "journaltitle",
                 ("article", false) => "journal",
-                ("online" | "misc" | "webpage", _) => if biblatex { "organization" } else { "howpublished" },
+                ("online" | "misc" | "webpage", _) => {
+                    if biblatex {
+                        "organization"
+                    } else {
+                        "howpublished"
+                    }
+                }
                 _ => "booktitle",
             };
             add(name, t(c));
         }
         if let Some(c) = &r.container_title_short {
-            add(if biblatex { "shortjournal" } else { "journal-abbreviation" }, t(c));
+            add(
+                if biblatex {
+                    "shortjournal"
+                } else {
+                    "journal-abbreviation"
+                },
+                t(c),
+            );
         }
         if let Some(c) = &r.collection_title {
             add("series", t(c));
@@ -984,7 +1187,8 @@ pub fn write(refs: &[Reference], biblatex: bool) -> String {
             add(if biblatex { "location" } else { "address" }, t(p));
         }
         if let Some(g) = &r.genre {
-            let implied = (ty == "phdthesis" && g == "PhD thesis") || (ty == "mastersthesis" && g == "Master's thesis");
+            let implied = (ty == "phdthesis" && g == "PhD thesis")
+                || (ty == "mastersthesis" && g == "Master's thesis");
             if !implied {
                 add("type", t(g));
             }
@@ -1001,7 +1205,10 @@ pub fn write(refs: &[Reference], biblatex: bool) -> String {
                 (false, Some(s)) => {
                     add("year", s.year.to_string());
                     if let Some(m) = s.month {
-                        const M: [&str; 12] = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+                        const M: [&str; 12] = [
+                            "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
+                            "nov", "dec",
+                        ];
                         if let Some(name) = M.get(m as usize - 1) {
                             fields.push(("month".into(), format!("\u{0}{name}")));
                         }
@@ -1043,13 +1250,30 @@ pub fn write(refs: &[Reference], biblatex: bool) -> String {
         let has_eprint = r.source_fields_of(FORMAT).any(|f| f.name == "eprint");
         if let (Some(a), false) = (&r.arxiv, has_eprint) {
             add("eprint", a.clone());
-            add(if biblatex { "eprinttype" } else { "archiveprefix" }, if biblatex { "arxiv".into() } else { "arXiv".into() });
+            add(
+                if biblatex {
+                    "eprinttype"
+                } else {
+                    "archiveprefix"
+                },
+                if biblatex {
+                    "arxiv".into()
+                } else {
+                    "arXiv".into()
+                },
+            );
         }
         if let Some(v) = &r.language {
-            add(if biblatex { "langid" } else { "language" }, text_to_latex(v, ascii, false));
+            add(
+                if biblatex { "langid" } else { "language" },
+                text_to_latex(v, ascii, false),
+            );
         }
         if !r.keywords.is_empty() {
-            add("keywords", text_to_latex(&r.keywords.join(", "), ascii, false));
+            add(
+                "keywords",
+                text_to_latex(&r.keywords.join(", "), ascii, false),
+            );
         }
         if let Some(v) = &r.abstract_text {
             add("abstract", text_to_latex(v, ascii, false));
@@ -1138,17 +1362,46 @@ mod tests {
     #[test]
     fn names_in_three_forms() {
         let n = bib_name("Ludwig van Beethoven");
-        assert_eq!((n.given.as_deref(), n.particle.as_deref(), n.family.as_deref()), (Some("Ludwig"), Some("van"), Some("Beethoven")));
+        assert_eq!(
+            (
+                n.given.as_deref(),
+                n.particle.as_deref(),
+                n.family.as_deref()
+            ),
+            (Some("Ludwig"), Some("van"), Some("Beethoven"))
+        );
         let n = bib_name("van der Berg, Jan");
-        assert_eq!((n.given.as_deref(), n.particle.as_deref(), n.family.as_deref()), (Some("Jan"), Some("van der"), Some("Berg")));
+        assert_eq!(
+            (
+                n.given.as_deref(),
+                n.particle.as_deref(),
+                n.family.as_deref()
+            ),
+            (Some("Jan"), Some("van der"), Some("Berg"))
+        );
         let n = bib_name("King, Jr, Martin Luther");
-        assert_eq!((n.given.as_deref(), n.suffix.as_deref(), n.family.as_deref()), (Some("Martin Luther"), Some("Jr"), Some("King")));
-        assert_eq!(bib_name("{Lunar Survey Collaboration}").literal.as_deref(), Some("Lunar Survey Collaboration"));
-        assert_eq!(bib_name("M{\\\"u}ller, J{\\\"o}rg").family.as_deref(), Some("Müller"));
+        assert_eq!(
+            (n.given.as_deref(), n.suffix.as_deref(), n.family.as_deref()),
+            (Some("Martin Luther"), Some("Jr"), Some("King"))
+        );
+        assert_eq!(
+            bib_name("{Lunar Survey Collaboration}").literal.as_deref(),
+            Some("Lunar Survey Collaboration")
+        );
+        assert_eq!(
+            bib_name("M{\\\"u}ller, J{\\\"o}rg").family.as_deref(),
+            Some("Müller")
+        );
         let n = bib_name("Jean de La Fontaine");
-        assert_eq!((n.particle.as_deref(), n.family.as_deref()), (Some("de"), Some("La Fontaine")));
+        assert_eq!(
+            (n.particle.as_deref(), n.family.as_deref()),
+            (Some("de"), Some("La Fontaine"))
+        );
         let n = bib_name("{\\'E}mile Zola");
-        assert_eq!((n.given.as_deref(), n.family.as_deref()), (Some("Émile"), Some("Zola")));
+        assert_eq!(
+            (n.given.as_deref(), n.family.as_deref()),
+            (Some("Émile"), Some("Zola"))
+        );
     }
 
     #[test]
@@ -1166,11 +1419,18 @@ mod tests {
 
     #[test]
     fn broken_entry_keeps_fields_and_reading_resumes() {
-        let (refs, diags) = read_str("@article{a,\n  title = {Kept},\n  journal = {Never closed\n@book{b, title = {Next}}\n");
+        let (refs, diags) = read_str(
+            "@article{a,\n  title = {Kept},\n  journal = {Never closed\n@book{b, title = {Next}}\n",
+        );
         assert_eq!(refs.len(), 2);
         assert_eq!(refs[0].title.as_deref(), Some("Kept"));
         assert_eq!(refs[1].title.as_deref(), Some("Next"));
-        assert!(diags.iter().any(|d| d.code == "bibtex.unclosed" && d.line == Some(3)), "{diags:?}");
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "bibtex.unclosed" && d.line == Some(3)),
+            "{diags:?}"
+        );
     }
 
     #[test]

@@ -90,7 +90,8 @@ pub struct Candidate {
 impl Candidate {
     /// Whether an identifier alone made this candidate a duplicate.
     pub fn exact(&self) -> bool {
-        self.relation == Relation::Duplicate && matches!(self.reasons.as_slice(), [Reason::Identifier { .. }])
+        self.relation == Relation::Duplicate
+            && matches!(self.reasons.as_slice(), [Reason::Identifier { .. }])
     }
 }
 
@@ -137,18 +138,43 @@ enum Version {
     Notice,
 }
 
-const NOTICE_TYPES: &[&str] = &["erratum", "correction", "retraction of publication", "expression of concern"];
-const PREPRINT_DOI_PREFIXES: &[&str] = &["10.1101/", "10.48550/", "10.21203/", "10.2139/", "10.20944/", "10.31234/", "10.31219/", "10.22541/"];
+const NOTICE_TYPES: &[&str] = &[
+    "erratum",
+    "correction",
+    "retraction of publication",
+    "expression of concern",
+];
+const PREPRINT_DOI_PREFIXES: &[&str] = &[
+    "10.1101/",
+    "10.48550/",
+    "10.21203/",
+    "10.2139/",
+    "10.20944/",
+    "10.31234/",
+    "10.31219/",
+    "10.22541/",
+];
 
 fn version(r: &Reference) -> Version {
-    let types: Vec<String> = r.publication_types.iter().map(|t| t.to_lowercase()).collect();
-    if types.iter().any(|t| NOTICE_TYPES.iter().any(|n| t.contains(n))) {
+    let types: Vec<String> = r
+        .publication_types
+        .iter()
+        .map(|t| t.to_lowercase())
+        .collect();
+    if types
+        .iter()
+        .any(|t| NOTICE_TYPES.iter().any(|n| t.contains(n)))
+    {
         return Version::Notice;
     }
     let preprint = types.iter().any(|t| t == "preprint")
         || r.id.to_ascii_uppercase().starts_with("PPR:")
-        || r.genre.as_deref().is_some_and(|g| g.eq_ignore_ascii_case("preprint"))
-        || r.doi.as_deref().is_some_and(|d| PREPRINT_DOI_PREFIXES.iter().any(|p| d.starts_with(p)));
+        || r.genre
+            .as_deref()
+            .is_some_and(|g| g.eq_ignore_ascii_case("preprint"))
+        || r.doi
+            .as_deref()
+            .is_some_and(|d| PREPRINT_DOI_PREFIXES.iter().any(|p| d.starts_with(p)));
     if preprint {
         Version::Preprint
     } else {
@@ -163,7 +189,17 @@ fn is_word(c: char) -> bool {
 /// kittum's `normalize_title`: NFC, lower case, everything but word characters and spaces to a
 /// space, spaces collapsed.
 pub fn normalise_title(title: &str) -> String {
-    let t: String = crate::text::strip_markup(title).nfc().flat_map(char::to_lowercase).map(|c| if is_word(c) || c.is_whitespace() { c } else { ' ' }).collect();
+    let t: String = crate::text::strip_markup(title)
+        .nfc()
+        .flat_map(char::to_lowercase)
+        .map(|c| {
+            if is_word(c) || c.is_whitespace() {
+                c
+            } else {
+                ' '
+            }
+        })
+        .collect();
     crate::text::squash(&t)
 }
 
@@ -202,7 +238,11 @@ fn first_author(r: &Reference) -> Option<String> {
 fn facts(r: &Reference) -> Facts {
     let title = r.title.as_deref().unwrap_or("");
     let normal = normalise_title(title);
-    let mut words: Vec<String> = normal.split(' ').filter(|w| !w.is_empty()).map(str::to_string).collect();
+    let mut words: Vec<String> = normal
+        .split(' ')
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect();
     words.sort();
     let sorted: Vec<char> = words.join(" ").chars().collect();
     words.dedup();
@@ -210,8 +250,17 @@ fn facts(r: &Reference) -> Facts {
     let author_shown = first_author(r);
     Facts {
         doi: r.doi.as_deref().and_then(crate::id::doi),
-        pmid: r.pmid.as_deref().map(|p| p.chars().filter(char::is_ascii_digit).collect::<String>()).filter(|p| !p.is_empty()),
-        pmcid: r.pmcid.as_deref().map(|p| p.chars().filter(char::is_ascii_digit).collect::<String>()).filter(|p| !p.is_empty()).map(|d| format!("PMC{d}")),
+        pmid: r
+            .pmid
+            .as_deref()
+            .map(|p| p.chars().filter(char::is_ascii_digit).collect::<String>())
+            .filter(|p| !p.is_empty()),
+        pmcid: r
+            .pmcid
+            .as_deref()
+            .map(|p| p.chars().filter(char::is_ascii_digit).collect::<String>())
+            .filter(|p| !p.is_empty())
+            .map(|d| format!("PMC{d}")),
         year: r.year(),
         author: author_shown.as_ref().map(|a| a.to_lowercase()),
         author_shown,
@@ -251,8 +300,16 @@ fn lcs(a: &[char], b: &[char]) -> usize {
     }
     let mut zeros = 0;
     for (w, v) in s.iter().enumerate() {
-        let bits = if w + 1 == words && a.len() % 64 != 0 { a.len() % 64 } else { 64 };
-        let mask = if bits == 64 { u64::MAX } else { (1u64 << bits) - 1 };
+        let bits = if w + 1 == words && a.len() % 64 != 0 {
+            a.len() % 64
+        } else {
+            64
+        };
+        let mask = if bits == 64 {
+            u64::MAX
+        } else {
+            (1u64 << bits) - 1
+        };
         zeros += (!v & mask).count_ones() as usize;
     }
     zeros
@@ -316,12 +373,22 @@ fn patterns() -> &'static Patterns {
 }
 
 const NOT_TRIAL_NAMES: &[&str] = &[
-    "phase", "week", "weeks", "month", "months", "year", "years", "study", "trial", "part", "cohort", "arm", "day", "days", "stage", "grade", "type", "version", "volume",
-    "vol", "no", "number",
+    "phase", "week", "weeks", "month", "months", "year", "years", "study", "trial", "part",
+    "cohort", "arm", "day", "days", "stage", "grade", "type", "version", "volume", "vol", "no",
+    "number",
 ];
 
 fn prepare(title: &str) -> String {
-    let t: String = title.nfc().map(|c| if matches!(c, '\u{2010}'..='\u{2015}' | '\u{2212}') { '-' } else { c }).collect();
+    let t: String = title
+        .nfc()
+        .map(|c| {
+            if matches!(c, '\u{2010}'..='\u{2015}' | '\u{2212}') {
+                '-'
+            } else {
+                c
+            }
+        })
+        .collect();
     let mut out = String::with_capacity(t.len());
     let mut space = false;
     for c in t.chars() {
@@ -340,7 +407,9 @@ fn prepare(title: &str) -> String {
 
 fn number(token: &str) -> String {
     let lower = token.to_lowercase();
-    let Some(m) = patterns().number.captures(&lower) else { return lower };
+    let Some(m) = patterns().number.captures(&lower) else {
+        return lower;
+    };
     let base = &m["base"];
     let value = match base {
         "i" => "1".to_string(),
@@ -348,10 +417,17 @@ fn number(token: &str) -> String {
         "iii" => "3".to_string(),
         "iv" => "4".to_string(),
         "v" => "5".to_string(),
-        b if b.contains('.') => b.parse::<f64>().map(format_g).unwrap_or_else(|_| b.to_string()),
+        b if b.contains('.') => b
+            .parse::<f64>()
+            .map(format_g)
+            .unwrap_or_else(|_| b.to_string()),
         b => b.trim_start_matches('0').to_string(),
     };
-    let value = if value.is_empty() { "0".to_string() } else { value };
+    let value = if value.is_empty() {
+        "0".to_string()
+    } else {
+        value
+    };
     value + &m["suffix"]
 }
 
@@ -369,11 +445,19 @@ fn format_g(x: f64) -> String {
 }
 
 fn ends(m: &Captures) -> Vec<String> {
-    ["a", "b"].iter().filter_map(|g| m.name(g)).map(|v| number(v.as_str())).collect()
+    ["a", "b"]
+        .iter()
+        .filter_map(|g| m.name(g))
+        .map(|v| number(v.as_str()))
+        .collect()
 }
 
 fn trial_names(prepared: &str) -> HashSet<String> {
-    patterns().trial_name.captures_iter(prepared).map(|c| c[1].to_lowercase()).collect()
+    patterns()
+        .trial_name
+        .captures_iter(prepared)
+        .map(|c| c[1].to_lowercase())
+        .collect()
 }
 
 fn words_before_numbers(prepared: &str) -> HashSet<String> {
@@ -405,7 +489,11 @@ fn tokens(prepared: &str, names: &HashSet<String>) -> Tokens {
     for pat in &p.follow_up {
         for m in pat.captures_iter(prepared) {
             let unit = m["unit"].to_lowercase();
-            let unit = if unit == "yr" { "year".to_string() } else { unit };
+            let unit = if unit == "yr" {
+                "year".to_string()
+            } else {
+                unit
+            };
             t.kinds[2].extend(ends(&m).into_iter().map(|n| format!("{unit} {n}")));
         }
     }
@@ -425,8 +513,14 @@ fn tokens_conflict(a: &Facts, b: &Facts) -> bool {
 
 /// Whether two titles name different trials, phases, follow-up times or study numbers.
 pub fn titles_conflict(a: &str, b: &str) -> bool {
-    let fa = facts(&Reference { title: Some(a.into()), ..Reference::default() });
-    let fb = facts(&Reference { title: Some(b.into()), ..Reference::default() });
+    let fa = facts(&Reference {
+        title: Some(a.into()),
+        ..Reference::default()
+    });
+    let fb = facts(&Reference {
+        title: Some(b.into()),
+        ..Reference::default()
+    });
     tokens_conflict(&fa, &fb)
 }
 
@@ -444,12 +538,25 @@ fn relation(a: &Facts, b: &Facts) -> Relation {
 }
 
 fn compare(i: usize, j: usize, a: &Facts, b: &Facts) -> Option<Candidate> {
-    for (kind, x, y) in [(IdKind::Doi, &a.doi, &b.doi), (IdKind::Pmid, &a.pmid, &b.pmid), (IdKind::Pmcid, &a.pmcid, &b.pmcid)] {
+    for (kind, x, y) in [
+        (IdKind::Doi, &a.doi, &b.doi),
+        (IdKind::Pmid, &a.pmid, &b.pmid),
+        (IdKind::Pmcid, &a.pmcid, &b.pmcid),
+    ] {
         if let (Some(x), Some(y)) = (x, y) {
             if x != y {
                 return None;
             }
-            return Some(Candidate { a: i, b: j, relation: relation(a, b), score: 100.0, reasons: vec![Reason::Identifier { kind, value: x.clone() }] });
+            return Some(Candidate {
+                a: i,
+                b: j,
+                relation: relation(a, b),
+                score: 100.0,
+                reasons: vec![Reason::Identifier {
+                    kind,
+                    value: x.clone(),
+                }],
+            });
         }
     }
     if a.sorted.is_empty() || b.sorted.is_empty() {
@@ -484,15 +591,26 @@ fn compare(i: usize, j: usize, a: &Facts, b: &Facts) -> Option<Candidate> {
     }
     let mut reasons = vec![Reason::Title { score }];
     if year_match {
-        reasons.push(Reason::Year { year: a.year.unwrap_or_default() });
+        reasons.push(Reason::Year {
+            year: a.year.unwrap_or_default(),
+        });
     }
     if author_match {
         let shown = a.author_shown.clone().unwrap_or_default();
         let mut c = shown.chars();
-        let family = c.next().map(|f| f.to_uppercase().chain(c).collect()).unwrap_or_default();
+        let family = c
+            .next()
+            .map(|f| f.to_uppercase().chain(c).collect())
+            .unwrap_or_default();
         reasons.push(Reason::FirstAuthor { family });
     }
-    Some(Candidate { a: i, b: j, relation: relation(a, b), score, reasons })
+    Some(Candidate {
+        a: i,
+        b: j,
+        relation: relation(a, b),
+        score,
+        reasons,
+    })
 }
 
 /// Compare two references directly.
@@ -505,7 +623,9 @@ pub fn compare_pair(a: &Reference, b: &Reference) -> Option<Candidate> {
 fn pairs_to_compare(facts: &[Facts]) -> Vec<(usize, usize)> {
     let n = facts.len();
     if n <= EXHAUSTIVE_LIMIT {
-        return (0..n).flat_map(|i| (i + 1..n).map(move |j| (i, j))).collect();
+        return (0..n)
+            .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
+            .collect();
     }
     let mut seen: HashSet<(u32, u32)> = HashSet::new();
     let add_block = |members: &[usize], seen: &mut HashSet<(u32, u32)>| {
@@ -556,7 +676,10 @@ fn pairs_to_compare(facts: &[Facts]) -> Vec<(usize, usize)> {
     for members in by_author.values() {
         add_block(members, &mut seen);
     }
-    let mut out: Vec<(usize, usize)> = seen.into_iter().map(|(a, b)| (a as usize, b as usize)).collect();
+    let mut out: Vec<(usize, usize)> = seen
+        .into_iter()
+        .map(|(a, b)| (a as usize, b as usize))
+        .collect();
     out.sort_unstable();
     out
 }
@@ -598,7 +721,10 @@ pub fn find_duplicates(refs: &[Reference]) -> Duplicates {
     let facts: Vec<Facts> = refs.iter().map(facts).collect();
     let mut groups = Groups {
         parent: (0..refs.len()).collect(),
-        ids: facts.iter().map(|f| [&f.doi, &f.pmid, &f.pmcid].map(|v| v.iter().cloned().collect())).collect(),
+        ids: facts
+            .iter()
+            .map(|f| [&f.doi, &f.pmid, &f.pmcid].map(|v| v.iter().cloned().collect()))
+            .collect(),
     };
     let mut pairs = Vec::new();
     for (i, j) in pairs_to_compare(&facts) {
@@ -618,7 +744,10 @@ pub fn find_duplicates(refs: &[Reference]) -> Duplicates {
         .filter(|m| m.len() > 1)
         .map(|members| {
             let set: HashSet<usize> = members.iter().copied().collect();
-            let exact = pairs.iter().filter(|p| set.contains(&p.a)).all(Candidate::exact);
+            let exact = pairs
+                .iter()
+                .filter(|p| set.contains(&p.a))
+                .all(Candidate::exact);
             Group { members, exact }
         })
         .collect();
@@ -635,7 +764,11 @@ mod tests {
         Reference {
             title: Some(title.into()),
             issued: year.map(Date::year),
-            author: if author.is_empty() { vec![] } else { vec![Name::person(author, Some("A."))] },
+            author: if author.is_empty() {
+                vec![]
+            } else {
+                vec![Name::person(author, Some("A."))]
+            },
             ..Reference::default()
         }
     }
@@ -644,7 +777,10 @@ mod tests {
     fn indel_ratio_matches_rapidfuzz() {
         assert_eq!(ratio("this is a test", "this is a test!").round(), 97.0);
         assert!((ratio("fuzzy wuzzy was a bear", "wuzzy fuzzy was a bear") - 90.91).abs() < 0.01);
-        assert_eq!(title_score("fuzzy wuzzy was a bear", "wuzzy fuzzy was a bear"), 100.0);
+        assert_eq!(
+            title_score("fuzzy wuzzy was a bear", "wuzzy fuzzy was a bear"),
+            100.0
+        );
         let long_a: String = "abcdefghij".repeat(20);
         let long_b: String = format!("x{}", "abcdefghij".repeat(20));
         assert!((ratio(&long_a, &long_b) - 200.0 * 200.0 / 401.0).abs() < 1e-9);
@@ -652,13 +788,28 @@ mod tests {
 
     #[test]
     fn tokens_like_kittum() {
-        assert!(titles_conflict("Phase II trial of moth counts", "Phase III trial of moth counts"));
-        assert!(!titles_conflict("Phase 2 trial of moth counts", "Phase II trial of moth counts"));
-        assert!(titles_conflict("Moth counts: 12-month follow-up", "Moth counts: 24-month follow-up"));
-        assert!(titles_conflict("SKYWATCH 1 survey of meteors", "SKYWATCH 2 survey of meteors"));
+        assert!(titles_conflict(
+            "Phase II trial of moth counts",
+            "Phase III trial of moth counts"
+        ));
+        assert!(!titles_conflict(
+            "Phase 2 trial of moth counts",
+            "Phase II trial of moth counts"
+        ));
+        assert!(titles_conflict(
+            "Moth counts: 12-month follow-up",
+            "Moth counts: 24-month follow-up"
+        ));
+        assert!(titles_conflict(
+            "SKYWATCH 1 survey of meteors",
+            "SKYWATCH 2 survey of meteors"
+        ));
         assert!(!titles_conflict("Meteor survey 2019", "Meteor survey"));
         assert!(titles_conflict("Study 301 of tides", "Study 302 of tides"));
-        assert!(titles_conflict("Tidewatch 3 of tides", "tidewatch 4 of tides"));
+        assert!(titles_conflict(
+            "Tidewatch 3 of tides",
+            "tidewatch 4 of tides"
+        ));
     }
 
     #[test]
@@ -692,15 +843,29 @@ mod tests {
         let c = compare_pair(&a, &b).unwrap();
         assert_eq!(c.reasons.len(), 3);
         assert_eq!(c.reasons[2].describe(), "same first author Okafor");
-        assert!(compare_pair(&a, &rec("The moths of the forest edge", Some(2022), "Okafor")).is_none());
-        assert!(compare_pair(&a, &rec("The moths of the forest edge", Some(2019), "Lind")).is_none());
+        assert!(compare_pair(
+            &a,
+            &rec("The moths of the forest edge", Some(2022), "Okafor")
+        )
+        .is_none());
+        assert!(
+            compare_pair(&a, &rec("The moths of the forest edge", Some(2019), "Lind")).is_none()
+        );
         assert!(compare_pair(&a, &rec("The moths of the forest edge", None, "")).is_some());
-        assert!(compare_pair(&a, &rec("The moths of the forest edges and fields", None, "")).is_none());
+        assert!(compare_pair(
+            &a,
+            &rec("The moths of the forest edges and fields", None, "")
+        )
+        .is_none());
     }
 
     #[test]
     fn groups_refuse_conflicting_ids() {
-        let mut refs = vec![rec("Moths at the forest edge", Some(2019), "Okafor"), rec("Moths at the forest edge", Some(2019), "Okafor"), rec("Moths at the forest edge", Some(2019), "Okafor")];
+        let mut refs = vec![
+            rec("Moths at the forest edge", Some(2019), "Okafor"),
+            rec("Moths at the forest edge", Some(2019), "Okafor"),
+            rec("Moths at the forest edge", Some(2019), "Okafor"),
+        ];
         refs[0].doi = Some("10.5555/a".into());
         refs[2].doi = Some("10.5555/b".into());
         let d = find_duplicates(&refs);
@@ -714,11 +879,26 @@ mod tests {
     fn blocking_finds_what_exhaustive_finds() {
         let mut refs = Vec::new();
         for i in 0..(EXHAUSTIVE_LIMIT + 50) {
-            refs.push(rec(&format!("Survey number {i} of the nocturnal moths of region {}", i * 7919 % 10007), Some(1990 + (i % 30) as i32), &format!("Author{}", i % 97)));
+            refs.push(rec(
+                &format!(
+                    "Survey number {i} of the nocturnal moths of region {}",
+                    i * 7919 % 10007
+                ),
+                Some(1990 + (i % 30) as i32),
+                &format!("Author{}", i % 97),
+            ));
         }
-        refs.push(rec("Survey number 5 of the nocturnal moths of region 39595", Some(1995), "Author5"));
+        refs.push(rec(
+            "Survey number 5 of the nocturnal moths of region 39595",
+            Some(1995),
+            "Author5",
+        ));
         refs[5].title = Some("Survey number 5 of the nocturnal moths of region 39595".into());
         let d = find_duplicates(&refs);
-        assert!(d.pairs.iter().any(|p| p.a == 5 && p.b == refs.len() - 1), "{:?}", d.pairs.len());
+        assert!(
+            d.pairs.iter().any(|p| p.a == 5 && p.b == refs.len() - 1),
+            "{:?}",
+            d.pairs.len()
+        );
     }
 }

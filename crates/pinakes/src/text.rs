@@ -12,16 +12,28 @@ use unicode_normalization::UnicodeNormalization;
 /// a few stray Latin-1 bytes keeps its UTF-8.
 pub fn decode(bytes: &[u8], diags: &mut Vec<Diagnostic>) -> String {
     let text = if let Some(rest) = bytes.strip_prefix(&[0xEF, 0xBB, 0xBF]) {
-        diags.push(Diagnostic::info("text.bom", "Removed a UTF-8 byte-order mark"));
+        diags.push(Diagnostic::info(
+            "text.bom",
+            "Removed a UTF-8 byte-order mark",
+        ));
         decode_utf8_or_1252(rest, diags)
     } else if let Some(rest) = bytes.strip_prefix(&[0xFF, 0xFE]) {
-        diags.push(Diagnostic::info("text.utf16", "Read UTF-16 (little-endian) text"));
+        diags.push(Diagnostic::info(
+            "text.utf16",
+            "Read UTF-16 (little-endian) text",
+        ));
         decode_utf16(rest, false, diags)
     } else if let Some(rest) = bytes.strip_prefix(&[0xFE, 0xFF]) {
-        diags.push(Diagnostic::info("text.utf16", "Read UTF-16 (big-endian) text"));
+        diags.push(Diagnostic::info(
+            "text.utf16",
+            "Read UTF-16 (big-endian) text",
+        ));
         decode_utf16(rest, true, diags)
     } else if let Some(big_endian) = sniff_utf16(bytes) {
-        diags.push(Diagnostic::info("text.utf16", "Read UTF-16 text that had no byte-order mark"));
+        diags.push(Diagnostic::info(
+            "text.utf16",
+            "Read UTF-16 text that had no byte-order mark",
+        ));
         decode_utf16(bytes, big_endian, diags)
     } else {
         decode_utf8_or_1252(bytes, diags)
@@ -58,11 +70,16 @@ pub fn clean_text(text: String, diags: &mut Vec<Diagnostic>) -> String {
     if boms > 0 {
         diags.push(Diagnostic::info(
             "text.bom",
-            format!("Removed {boms} byte-order mark(s) inside the text, as concatenated exports leave"),
+            format!(
+                "Removed {boms} byte-order mark(s) inside the text, as concatenated exports leave"
+            ),
         ));
     }
     if nuls > 0 {
-        diags.push(Diagnostic::warning("text.nul", format!("Removed {nuls} NUL character(s)")));
+        diags.push(Diagnostic::warning(
+            "text.nul",
+            format!("Removed {nuls} NUL character(s)"),
+        ));
     }
     out
 }
@@ -73,7 +90,12 @@ fn sniff_utf16(bytes: &[u8]) -> Option<bool> {
     }
     let sample = &bytes[..bytes.len().min(512) & !1];
     let even_zero = sample.iter().step_by(2).filter(|b| **b == 0).count();
-    let odd_zero = sample.iter().skip(1).step_by(2).filter(|b| **b == 0).count();
+    let odd_zero = sample
+        .iter()
+        .skip(1)
+        .step_by(2)
+        .filter(|b| **b == 0)
+        .count();
     let half = sample.len() / 2;
     if odd_zero * 10 >= half * 9 && even_zero == 0 {
         Some(false)
@@ -150,7 +172,10 @@ fn decode_utf8_or_1252(bytes: &[u8], diags: &mut Vec<Diagnostic>) -> String {
             format!("Text is mostly UTF-8; read {foreign} other byte(s) as Windows-1252"),
         )
     } else {
-        Diagnostic::info("text.windows-1252", "Text is not UTF-8; read it as Windows-1252 (Latin-1)")
+        Diagnostic::info(
+            "text.windows-1252",
+            "Text is not UTF-8; read it as Windows-1252 (Latin-1)",
+        )
     };
     if let Some(line) = first_line {
         d = d.at(line);
@@ -162,10 +187,11 @@ fn decode_utf8_or_1252(bytes: &[u8], diags: &mut Vec<Diagnostic>) -> String {
 /// One Windows-1252 byte as a character. The five unassigned bytes map to C1 controls.
 pub fn windows_1252(b: u8) -> char {
     const HIGH: [char; 32] = [
-        '\u{20AC}', '\u{0081}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}', '\u{2021}',
-        '\u{02C6}', '\u{2030}', '\u{0160}', '\u{2039}', '\u{0152}', '\u{008D}', '\u{017D}', '\u{008F}',
-        '\u{0090}', '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}', '\u{2022}', '\u{2013}', '\u{2014}',
-        '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}', '\u{0153}', '\u{009D}', '\u{017E}', '\u{0178}',
+        '\u{20AC}', '\u{0081}', '\u{201A}', '\u{0192}', '\u{201E}', '\u{2026}', '\u{2020}',
+        '\u{2021}', '\u{02C6}', '\u{2030}', '\u{0160}', '\u{2039}', '\u{0152}', '\u{008D}',
+        '\u{017D}', '\u{008F}', '\u{0090}', '\u{2018}', '\u{2019}', '\u{201C}', '\u{201D}',
+        '\u{2022}', '\u{2013}', '\u{2014}', '\u{02DC}', '\u{2122}', '\u{0161}', '\u{203A}',
+        '\u{0153}', '\u{009D}', '\u{017E}', '\u{0178}',
     ];
     match b {
         0x80..=0x9F => HIGH[(b - 0x80) as usize],
@@ -353,7 +379,11 @@ pub fn strip_markup(s: &str) -> String {
         let end = tail.find('>');
         let tag = end.map(|e| &tail[1..e]);
         let known = tag.is_some_and(|t| {
-            let name = t.trim_start_matches('/').split([' ', '\t']).next().unwrap_or("");
+            let name = t
+                .trim_start_matches('/')
+                .split([' ', '\t'])
+                .next()
+                .unwrap_or("");
             matches!(name, "i" | "b" | "sup" | "sub" | "sc" | "span")
         });
         if known {
@@ -404,7 +434,10 @@ mod tests {
 
     #[test]
     fn folds_like_the_old_key_makers() {
-        assert_eq!(fold_for_key("Señor Øresund Straße"), "senor oresund strasse");
+        assert_eq!(
+            fold_for_key("Señor Øresund Straße"),
+            "senor oresund strasse"
+        );
         assert_eq!(fold_for_key("Müller"), "mueller");
         assert_eq!(fold_for_key("Достоевский"), "dostoevskiy");
         assert_eq!(fold_for_key("Σωκράτης"), "sokratis");
@@ -424,10 +457,25 @@ mod tests {
         assert_eq!(decode(b"M\xfcller \x96 1", &mut d), "Müller – 1");
         assert_eq!(d[0].code, "text.windows-1252");
         let mut d = Vec::new();
-        let utf16: Vec<u8> = [0xFF, 0xFE].into_iter().chain("TY  - ä".encode_utf16().flat_map(|u| u.to_le_bytes())).collect();
+        let utf16: Vec<u8> = [0xFF, 0xFE]
+            .into_iter()
+            .chain("TY  - ä".encode_utf16().flat_map(|u| u.to_le_bytes()))
+            .collect();
         assert_eq!(decode(&utf16, &mut d), "TY  - ä");
         let mut d = Vec::new();
-        assert_eq!(decode("Müller \u{00e9}".as_bytes().iter().copied().chain([0xE9]).collect::<Vec<_>>().as_slice(), &mut d), "Müller éé");
+        assert_eq!(
+            decode(
+                "Müller \u{00e9}"
+                    .as_bytes()
+                    .iter()
+                    .copied()
+                    .chain([0xE9])
+                    .collect::<Vec<_>>()
+                    .as_slice(),
+                &mut d
+            ),
+            "Müller éé"
+        );
         assert_eq!(d[0].code, "text.mixed-encoding");
     }
 }

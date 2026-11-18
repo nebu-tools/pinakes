@@ -76,7 +76,10 @@ impl Format {
     }
 
     pub fn can_write(self) -> bool {
-        matches!(self, Format::Ris | Format::Bibtex | Format::Biblatex | Format::CslJson | Format::Hayagriva)
+        matches!(
+            self,
+            Format::Ris | Format::Bibtex | Format::Biblatex | Format::CslJson | Format::Hayagriva
+        )
     }
 
     /// The usual file extension.
@@ -95,15 +98,17 @@ impl Format {
 
     /// The format a file extension usually means, where it means only one.
     pub fn from_extension(ext: &str) -> Option<Format> {
-        Some(match ext.trim_start_matches('.').to_ascii_lowercase().as_str() {
-            "ris" => Format::Ris,
-            "bib" | "bibtex" => Format::Bibtex,
-            "nbib" | "medline" => Format::Medline,
-            "json" | "csljson" => Format::CslJson,
-            "csv" | "tsv" => Format::Csv,
-            "yaml" | "yml" => Format::Hayagriva,
-            _ => return None,
-        })
+        Some(
+            match ext.trim_start_matches('.').to_ascii_lowercase().as_str() {
+                "ris" => Format::Ris,
+                "bib" | "bibtex" => Format::Bibtex,
+                "nbib" | "medline" => Format::Medline,
+                "json" | "csljson" => Format::CslJson,
+                "csv" | "tsv" => Format::Csv,
+                "yaml" | "yml" => Format::Hayagriva,
+                _ => return None,
+            },
+        )
     }
 
     /// Work out the format of decoded text from its first lines.
@@ -119,14 +124,19 @@ impl Format {
             return Some(Format::WosText);
         }
         let first = start.lines().next().unwrap_or("");
-        if first.starts_with("PT\t") && wos::is_tab_header(&first.split('\t').map(str::to_string).collect::<Vec<_>>()) {
+        if first.starts_with("PT\t")
+            && wos::is_tab_header(&first.split('\t').map(str::to_string).collect::<Vec<_>>())
+        {
             return Some(Format::WosTab);
         }
         let lines: Vec<&str> = start.lines().take(200).collect();
         if lines.iter().any(|l| l.starts_with("PMID-")) {
             return Some(Format::Medline);
         }
-        if lines.iter().any(|l| matches!(ris::tag_line(l), Some(("TY", _)))) {
+        if lines
+            .iter()
+            .any(|l| matches!(ris::tag_line(l), Some(("TY", _))))
+        {
             return Some(Format::Ris);
         }
         if lines.iter().any(|l| is_bib_entry(l.trim_start())) {
@@ -135,8 +145,17 @@ impl Format {
         if lines.iter().filter(|l| ris::tag_line(l).is_some()).count() >= 2 {
             return Some(Format::Ris);
         }
-        let rows = csv::rows(&lines[..lines.len().min(12)].join("\n"), csv::sniff_delimiter(first), true, &mut Vec::new());
-        if rows.iter().take(10).any(|r| csv::is_record_header(&r.cells)) {
+        let rows = csv::rows(
+            &lines[..lines.len().min(12)].join("\n"),
+            csv::sniff_delimiter(first),
+            true,
+            &mut Vec::new(),
+        );
+        if rows
+            .iter()
+            .take(10)
+            .any(|r| csv::is_record_header(&r.cells))
+        {
             return Some(Format::Csv);
         }
         None
@@ -144,7 +163,9 @@ impl Format {
 }
 
 fn is_bib_entry(line: &str) -> bool {
-    let Some(rest) = line.strip_prefix('@') else { return false };
+    let Some(rest) = line.strip_prefix('@') else {
+        return false;
+    };
     let name_len = rest.bytes().take_while(|b| b.is_ascii_alphabetic()).count();
     name_len > 0 && rest[name_len..].trim_start().starts_with(['{', '('])
 }
@@ -162,7 +183,12 @@ pub struct UnknownFormat(pub String);
 impl fmt::Display for UnknownFormat {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let names: Vec<&str> = Format::ALL.iter().map(|f| f.name()).collect();
-        write!(f, "unknown format {:?}; the formats are {}", self.0, names.join(", "))
+        write!(
+            f,
+            "unknown format {:?}; the formats are {}",
+            self.0,
+            names.join(", ")
+        )
     }
 }
 
@@ -172,7 +198,11 @@ impl FromStr for Format {
     type Err = UnknownFormat;
 
     fn from_str(s: &str) -> Result<Format, UnknownFormat> {
-        let k: String = s.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect();
+        let k: String = s
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .flat_map(char::to_lowercase)
+            .collect();
         Ok(match k.as_str() {
             "ris" => Format::Ris,
             "bibtex" | "bib" => Format::Bibtex,
@@ -200,7 +230,10 @@ pub(crate) fn read_text(format: Format, text: &str, diags: &mut Vec<Diagnostic>)
         Format::WosTab => wos::read_tab(text, diags),
         Format::Csv => csv::read(text, diags),
         Format::Hayagriva => {
-            diags.push(Diagnostic::error("format.write-only", "Pinakes writes Hayagriva YAML but does not read it"));
+            diags.push(Diagnostic::error(
+                "format.write-only",
+                "Pinakes writes Hayagriva YAML but does not read it",
+            ));
             Vec::new()
         }
     }
@@ -225,11 +258,20 @@ mod tests {
     #[test]
     fn sniffing() {
         assert_eq!(Format::sniff("TY  - JOUR\nER  - \n"), Some(Format::Ris));
-        assert_eq!(Format::sniff("\n\n@article{k,\n title={x}}"), Some(Format::Bibtex));
+        assert_eq!(
+            Format::sniff("\n\n@article{k,\n title={x}}"),
+            Some(Format::Bibtex)
+        );
         assert_eq!(Format::sniff("PMID- 1\nTI  - x\n"), Some(Format::Medline));
-        assert_eq!(Format::sniff("<?xml version=\"1.0\"?><PubmedArticleSet/>"), Some(Format::PubmedXml));
+        assert_eq!(
+            Format::sniff("<?xml version=\"1.0\"?><PubmedArticleSet/>"),
+            Some(Format::PubmedXml)
+        );
         assert_eq!(Format::sniff("[{\"id\":\"a\"}]"), Some(Format::CslJson));
-        assert_eq!(Format::sniff("FN Clarivate Analytics Web of Science\nVR 1.0\n"), Some(Format::WosText));
+        assert_eq!(
+            Format::sniff("FN Clarivate Analytics Web of Science\nVR 1.0\n"),
+            Some(Format::WosText)
+        );
         assert_eq!(Format::sniff("PT\tAU\tTI\n"), Some(Format::WosTab));
         assert_eq!(Format::sniff("Authors,Title,Year\n"), Some(Format::Csv));
         assert_eq!(Format::sniff("hello"), None);

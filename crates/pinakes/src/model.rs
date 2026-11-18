@@ -115,20 +115,30 @@ impl Reference {
     }
 
     /// Source fields from one format.
-    pub fn source_fields_of<'a>(&'a self, format: &'a str) -> impl Iterator<Item = &'a SourceField> {
-        self.source_fields.iter().filter(move |f| f.format == format)
+    pub fn source_fields_of<'a>(
+        &'a self,
+        format: &'a str,
+    ) -> impl Iterator<Item = &'a SourceField> {
+        self.source_fields
+            .iter()
+            .filter(move |f| f.format == format)
     }
 }
 
 impl Name {
     pub fn literal(text: &str) -> Name {
-        Name { literal: Some(text.trim().to_string()), ..Name::default() }
+        Name {
+            literal: Some(text.trim().to_string()),
+            ..Name::default()
+        }
     }
 
     pub fn person(family: &str, given: Option<&str>) -> Name {
         Name {
             family: Some(family.trim().to_string()),
-            given: given.map(|g| g.trim().to_string()).filter(|g| !g.is_empty()),
+            given: given
+                .map(|g| g.trim().to_string())
+                .filter(|g| !g.is_empty()),
             ..Name::default()
         }
     }
@@ -174,11 +184,21 @@ impl Name {
 
 impl Date {
     pub fn year(year: i32) -> Date {
-        Date { start: Some(Ymd { year, month: None, day: None }), ..Date::default() }
+        Date {
+            start: Some(Ymd {
+                year,
+                month: None,
+                day: None,
+            }),
+            ..Date::default()
+        }
     }
 
     pub fn ymd(year: i32, month: Option<u8>, day: Option<u8>) -> Date {
-        Date { start: Some(Ymd { year, month, day }), ..Date::default() }
+        Date {
+            start: Some(Ymd { year, month, day }),
+            ..Date::default()
+        }
     }
 
     /// ISO 8601 form of the start (and end): `2020`, `2020-05`, `2020-05-01/2020-06`.

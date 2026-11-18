@@ -19,7 +19,12 @@ pub(crate) fn tag_line(line: &str) -> Option<(&str, &str)> {
         return None;
     }
     let tag = line[..4].trim_end();
-    if tag.is_empty() || !tag.bytes().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit()) || line[..4][tag.len()..].bytes().any(|c| c != b' ') {
+    if tag.is_empty()
+        || !tag
+            .bytes()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        || line[..4][tag.len()..].bytes().any(|c| c != b' ')
+    {
         return None;
     }
     match b.get(5) {
@@ -46,16 +51,29 @@ fn records(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Raw> {
         if let Some((tag, value)) = tag_line(line) {
             if tag == "PMID" || !open {
                 if tag != "PMID" {
-                    diags.push(Diagnostic::warning("medline.no-pmid", "A record does not start with PMID").at(n));
+                    diags.push(
+                        Diagnostic::warning("medline.no-pmid", "A record does not start with PMID")
+                            .at(n),
+                    );
                 }
-                out.push(Raw { line: n, fields: Vec::new() });
+                out.push(Raw {
+                    line: n,
+                    fields: Vec::new(),
+                });
                 open = true;
             }
-            out.last_mut().unwrap().fields.push((tag.to_string(), value.to_string(), n));
+            out.last_mut()
+                .unwrap()
+                .fields
+                .push((tag.to_string(), value.to_string(), n));
             continue;
         }
         let continuation = line.starts_with("      ") || line.starts_with('\t');
-        match out.last_mut().and_then(|r| r.fields.last_mut()).filter(|_| open) {
+        match out
+            .last_mut()
+            .and_then(|r| r.fields.last_mut())
+            .filter(|_| open)
+        {
             Some(last) => {
                 if !continuation {
                     diags.push(Diagnostic::warning("medline.bad-line", "A line is neither a field nor an indented continuation; read it as a continuation").at(n));
@@ -65,20 +83,27 @@ fn records(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Raw> {
                 }
                 last.1.push_str(line.trim());
             }
-            None => diags.push(Diagnostic::error("medline.stray-text", "Text outside any record; skipped it").at(n)),
+            None => diags.push(
+                Diagnostic::error("medline.stray-text", "Text outside any record; skipped it")
+                    .at(n),
+            ),
         }
     }
     out
 }
 
 fn to_reference(raw: Raw, index: usize, diags: &mut Vec<Diagnostic>) -> Reference {
-    let mut r = Reference { kind: "article-journal".into(), ..Reference::default() };
+    let mut r = Reference {
+        kind: "article-journal".into(),
+        ..Reference::default()
+    };
     let mut pending_full: Option<Name> = None;
     let mut fau_seen = false;
     let mut editors_full: Option<Name> = None;
     let mut book_title = None;
     let mut title = None;
     let mut dates = (None, None);
+    let mut bare_ed = false;
     for (tag, value, line) in raw.fields {
         let v = value.trim();
         match tag.as_str() {
@@ -98,7 +123,14 @@ fn to_reference(raw: Raw, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
                 Some(n) => r.author.push(n),
                 None => {
                     if fau_seen {
-                        diags.push(Diagnostic::info("medline.au-without-fau", format!("Author {v:?} has no full name (FAU)")).at(line).record(index));
+                        diags.push(
+                            Diagnostic::info(
+                                "medline.au-without-fau",
+                                format!("Author {v:?} has no full name (FAU)"),
+                            )
+                            .at(line)
+                            .record(index),
+                        );
                     }
                     r.author.push(parse_name(v));
                 }
@@ -110,15 +142,26 @@ fn to_reference(raw: Raw, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
                 r.author.push(Name::literal(v));
             }
             "FED" => {
+                let full = parse_name(v);
                 if let Some(n) = editors_full.take() {
                     r.editor.push(n);
                 }
-                editors_full = Some(parse_name(v));
+                // Some exports put ED before its FED; the full name replaces the short one.
+                if bare_ed && r.editor.last().is_some_and(|e| e.family == full.family) {
+                    r.editor.pop();
+                    r.editor.push(full);
+                } else {
+                    editors_full = Some(full);
+                }
+                bare_ed = false;
             }
-            "ED" => match editors_full.take() {
-                Some(n) => r.editor.push(n),
-                None => r.editor.push(parse_name(v)),
-            },
+            "ED" => {
+                bare_ed = editors_full.is_none();
+                match editors_full.take() {
+                    Some(n) => r.editor.push(n),
+                    None => r.editor.push(parse_name(v)),
+                }
+            }
             "DP" => dates.0 = parse_date(v),
             "DEP" => {
                 dates.1 = parse_date(v);
@@ -152,7 +195,9 @@ fn to_reference(raw: Raw, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
                 if lower.ends_with("[doi]") {
                     if r.doi.is_none() {
                         r.doi = Some(v[..v.len() - 5].trim().to_string());
-                    } else if r.doi.as_deref().map(|d| d.to_ascii_lowercase()) != Some(lower[..lower.len() - 5].trim().to_string()) {
+                    } else if r.doi.as_deref().map(|d| d.to_ascii_lowercase())
+                        != Some(lower[..lower.len() - 5].trim().to_string())
+                    {
                         r.keep(FORMAT, &tag, v);
                     }
                 } else if lower.ends_with("[pmc]") && r.pmcid.is_none() {
@@ -201,9 +246,15 @@ fn to_reference(raw: Raw, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
 pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
     let raws = records(text, diags);
     if raws.is_empty() && !text.trim().is_empty() {
-        diags.push(Diagnostic::error("medline.no-records", "Found no MEDLINE records (a record starts with PMID- )"));
+        diags.push(Diagnostic::error(
+            "medline.no-records",
+            "Found no MEDLINE records (a record starts with PMID- )",
+        ));
     }
-    raws.into_iter().enumerate().map(|(i, raw)| to_reference(raw, i, diags)).collect()
+    raws.into_iter()
+        .enumerate()
+        .map(|(i, raw)| to_reference(raw, i, diags))
+        .collect()
 }
 
 #[cfg(test)]
@@ -217,13 +268,19 @@ mod tests {
         let refs = read(src, &mut d);
         assert_eq!(refs.len(), 2, "{d:?}");
         let r = &refs[0];
-        assert_eq!(r.title.as_deref(), Some("Tidal pools as nurseries: a long title that wraps onto a second line."));
+        assert_eq!(
+            r.title.as_deref(),
+            Some("Tidal pools as nurseries: a long title that wraps onto a second line.")
+        );
         assert_eq!(r.doi.as_deref(), Some("10.5555/tide.2019.2"));
         assert_eq!(r.author.len(), 2);
         assert_eq!(r.author[0].given.as_deref(), Some("Maja"));
         assert_eq!(r.author[1].literal.as_deref(), Some("Coastal Survey Team"));
         assert_eq!(r.issued.as_ref().unwrap().start.unwrap().month, Some(7));
-        assert!(r.source_fields.iter().any(|f| f.name == "LID" && f.value.ends_with("[pii]")));
+        assert!(r
+            .source_fields
+            .iter()
+            .any(|f| f.name == "LID" && f.value.ends_with("[pii]")));
         assert_eq!(refs[1].author[0].given.as_deref(), Some("J. A."));
     }
 

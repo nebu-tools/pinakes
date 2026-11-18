@@ -24,7 +24,10 @@ pub enum Node {
 
 impl Element {
     pub fn attr(&self, name: &str) -> Option<&str> {
-        self.attrs.iter().find(|(k, _)| k == name).map(|(_, v)| v.as_str())
+        self.attrs
+            .iter()
+            .find(|(k, _)| k == name)
+            .map(|(_, v)| v.as_str())
     }
 
     pub fn elements(&self) -> impl Iterator<Item = &Element> {
@@ -93,7 +96,9 @@ impl Element {
     }
 
     pub fn text_of(&self, path: &str) -> Option<String> {
-        self.find(path).map(|e| e.text(false)).filter(|t| !t.is_empty())
+        self.find(path)
+            .map(|e| e.text(false))
+            .filter(|t| !t.is_empty())
     }
 }
 
@@ -132,7 +137,13 @@ fn unescape(s: &str, line: usize, diags: &mut Vec<Diagnostic>) -> String {
                     rest = &after[end + 1..];
                 }
                 None => {
-                    diags.push(Diagnostic::warning("xml.unknown-entity", format!("Unknown entity &{}; kept as written", &after[..end])).at(line));
+                    diags.push(
+                        Diagnostic::warning(
+                            "xml.unknown-entity",
+                            format!("Unknown entity &{}; kept as written", &after[..end]),
+                        )
+                        .at(line),
+                    );
                     out.push('&');
                     rest = after;
                 }
@@ -155,7 +166,11 @@ fn local(name: &str) -> &str {
 pub fn parse(src: &str, diags: &mut Vec<Diagnostic>) -> Element {
     let lines = LineIndex::new(src);
     let b = src.as_bytes();
-    let mut stack: Vec<Element> = vec![Element { name: "#document".into(), line: 1, ..Element::default() }];
+    let mut stack: Vec<Element> = vec![Element {
+        name: "#document".into(),
+        line: 1,
+        ..Element::default()
+    }];
     let mut i = 0;
     while i < b.len() {
         if b[i] != b'<' {
@@ -167,7 +182,10 @@ pub fn parse(src: &str, diags: &mut Vec<Diagnostic>) -> Element {
             if stack.len() > 1 || !raw.trim().is_empty() {
                 let t = unescape(raw, lines.line(start), diags);
                 if stack.len() == 1 && !t.trim().is_empty() {
-                    diags.push(Diagnostic::warning("xml.stray-text", "Text outside the root element").at(lines.line(start)));
+                    diags.push(
+                        Diagnostic::warning("xml.stray-text", "Text outside the root element")
+                            .at(lines.line(start)),
+                    );
                 }
                 stack.last_mut().unwrap().children.push(Node::Text(t));
             }
@@ -182,7 +200,11 @@ pub fn parse(src: &str, diags: &mut Vec<Diagnostic>) -> Element {
         if rest.starts_with("<![CDATA[") {
             let end = rest.find("]]>").map(|e| i + e).unwrap_or(b.len());
             let text = &src[i + 9..end.max(i + 9)];
-            stack.last_mut().unwrap().children.push(Node::Text(text.to_string()));
+            stack
+                .last_mut()
+                .unwrap()
+                .children
+                .push(Node::Text(text.to_string()));
             i = (end + 3).min(b.len());
             continue;
         }
@@ -221,7 +243,13 @@ pub fn parse(src: &str, diags: &mut Vec<Diagnostic>) -> Element {
             j += 1;
         }
         if j >= b.len() || b[j] == b'<' {
-            diags.push(Diagnostic::error("xml.broken-tag", "A tag is not closed with >; kept its text").at(line));
+            diags.push(
+                Diagnostic::error(
+                    "xml.broken-tag",
+                    "A tag is not closed with >; kept its text",
+                )
+                .at(line),
+            );
             let t = unescape(&src[i..j.min(b.len())], line, diags);
             stack.last_mut().unwrap().children.push(Node::Text(t));
             i = j;
@@ -235,33 +263,62 @@ pub fn parse(src: &str, diags: &mut Vec<Diagnostic>) -> Element {
                 Some(pos) if pos > 0 => {
                     while stack.len() > pos + 1 {
                         let open = stack.pop().unwrap();
-                        diags.push(Diagnostic::warning("xml.unclosed", format!("<{}> from line {} is not closed before </{name}>", open.name, open.line)).at(line));
+                        diags.push(
+                            Diagnostic::warning(
+                                "xml.unclosed",
+                                format!(
+                                    "<{}> from line {} is not closed before </{name}>",
+                                    open.name, open.line
+                                ),
+                            )
+                            .at(line),
+                        );
                         stack.last_mut().unwrap().children.push(Node::Element(open));
                     }
                     let done = stack.pop().unwrap();
                     stack.last_mut().unwrap().children.push(Node::Element(done));
                 }
-                _ => diags.push(Diagnostic::warning("xml.stray-end", format!("</{name}> closes nothing; ignored")).at(line)),
+                _ => diags.push(
+                    Diagnostic::warning(
+                        "xml.stray-end",
+                        format!("</{name}> closes nothing; ignored"),
+                    )
+                    .at(line),
+                ),
             }
             continue;
         }
         let self_closing = inner.ends_with('/');
         let inner = inner.trim_end_matches('/');
-        let name_end = inner.find(|c: char| c.is_whitespace()).unwrap_or(inner.len());
+        let name_end = inner
+            .find(|c: char| c.is_whitespace())
+            .unwrap_or(inner.len());
         let name = local(&inner[..name_end]).to_string();
         if name.is_empty() {
-            diags.push(Diagnostic::warning("xml.broken-tag", "A < starts no tag; kept as text").at(line));
-            stack.last_mut().unwrap().children.push(Node::Text(format!("<{inner}>")));
+            diags.push(
+                Diagnostic::warning("xml.broken-tag", "A < starts no tag; kept as text").at(line),
+            );
+            stack
+                .last_mut()
+                .unwrap()
+                .children
+                .push(Node::Text(format!("<{inner}>")));
             continue;
         }
-        let mut el = Element { name, line, ..Element::default() };
+        let mut el = Element {
+            name,
+            line,
+            ..Element::default()
+        };
         let mut a = &inner[name_end..];
         loop {
             a = a.trim_start();
             let Some(eq) = a.find('=') else { break };
             let key = local(a[..eq].trim()).to_string();
             let v = a[eq + 1..].trim_start();
-            let Some(q) = v.chars().next().filter(|c| *c == '"' || *c == '\'') else { break };
+            let Some(q) = v.chars().next().filter(|c| *c == '"' || *c == '\'') else {
+                break;
+            };
             let Some(end) = v[1..].find(q) else { break };
             el.attrs.push((key, unescape(&v[1..1 + end], line, diags)));
             a = &v[end + 2..];
@@ -272,9 +329,23 @@ pub fn parse(src: &str, diags: &mut Vec<Diagnostic>) -> Element {
             stack.push(el);
         }
     }
+    if stack.len() > 1 {
+        // One cut-off leaves every enclosing element open; report it once, at the innermost.
+        let names: Vec<String> = stack[1..].iter().map(|e| format!("<{}>", e.name)).collect();
+        let innermost = stack.last().map(|e| e.line).unwrap_or(1);
+        diags.push(
+            Diagnostic::error(
+                "xml.unclosed",
+                format!(
+                    "The file ends with {} still open; it may be cut off",
+                    names.join(" ")
+                ),
+            )
+            .at(innermost),
+        );
+    }
     while stack.len() > 1 {
         let open = stack.pop().unwrap();
-        diags.push(Diagnostic::error("xml.unclosed", format!("<{}> from line {} is not closed at the end of the file", open.name, open.line)).at(open.line));
         stack.last_mut().unwrap().children.push(Node::Element(open));
     }
     stack.pop().unwrap()
@@ -298,7 +369,19 @@ mod tests {
 
     #[test]
     fn never_panics_on_fragments() {
-        for s in ["<", "<a", "</a>", "<a b='>", "&", "&#xZZ;", "<![CDATA[", "<!--", "<a><b></a></b>", "<?", "<!"] {
+        for s in [
+            "<",
+            "<a",
+            "</a>",
+            "<a b='>",
+            "&",
+            "&#xZZ;",
+            "<![CDATA[",
+            "<!--",
+            "<a><b></a></b>",
+            "<?",
+            "<!",
+        ] {
             let _ = parse(s, &mut Vec::new());
         }
     }

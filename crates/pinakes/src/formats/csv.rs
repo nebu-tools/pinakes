@@ -60,7 +60,10 @@ pub(crate) fn rows(text: &str, delim: char, quotes: bool, diags: &mut Vec<Diagno
             '\n' => {
                 row.push(std::mem::take(&mut cell));
                 if row.iter().any(|c| !c.trim().is_empty()) {
-                    out.push(Row { cells: std::mem::take(&mut row), line: row_line });
+                    out.push(Row {
+                        cells: std::mem::take(&mut row),
+                        line: row_line,
+                    });
                 } else {
                     row.clear();
                 }
@@ -84,7 +87,10 @@ pub(crate) fn rows(text: &str, delim: char, quotes: bool, diags: &mut Vec<Diagno
     }
     row.push(cell);
     if row.iter().any(|c| !c.trim().is_empty()) {
-        out.push(Row { cells: row, line: row_line });
+        out.push(Row {
+            cells: row,
+            line: row_line,
+        });
     }
     out
 }
@@ -107,7 +113,10 @@ pub(crate) fn sniff_delimiter(first_line: &str) -> char {
 }
 
 fn key(name: &str) -> String {
-    name.chars().filter(|c| c.is_alphanumeric()).flat_map(char::to_lowercase).collect()
+    name.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -146,20 +155,91 @@ enum Col {
 }
 
 const ALIASES: &[(Col, &[&str])] = &[
-    (Col::Title, &["title", "articletitle", "documenttitle", "primarytitle", "ti"]),
+    (
+        Col::Title,
+        &[
+            "title",
+            "articletitle",
+            "documenttitle",
+            "primarytitle",
+            "ti",
+        ],
+    ),
     (Col::Abstract, &["abstract", "ab", "summary"]),
     (Col::Doi, &["doi", "di", "digitalobjectidentifier"]),
     (Col::Pmid, &["pmid", "pubmedid", "pubmed", "pm"]),
     (Col::Pmcid, &["pmcid", "pmc", "pubmedcentralid"]),
     (Col::AuthorFull, &["authorfullnames", "af"]),
-    (Col::Authors, &["authors", "author", "authorss", "au", "authornames", "creator", "creators"]),
+    (
+        Col::Authors,
+        &[
+            "authors",
+            "author",
+            "authorss",
+            "au",
+            "authornames",
+            "creator",
+            "creators",
+        ],
+    ),
     (Col::Editors, &["editors", "editor", "ed"]),
-    (Col::Journal, &["journal", "journaltitle", "sourcetitle", "source", "publication", "publicationtitle", "jt", "so", "containertitle"]),
-    (Col::JournalShort, &["abbreviatedsourcetitle", "journalabbreviation", "ta", "ji", "j9"]),
-    (Col::Year, &["year", "publicationyear", "py", "pubyear", "dp"]),
-    (Col::Date, &["date", "publicationdate", "issued", "datepublished"]),
-    (Col::Types, &["publicationtype", "publicationtypes", "documenttype", "itemtype", "type", "pt", "dt"]),
-    (Col::Id, &["id", "recordid", "accessionnumber", "refid", "eid", "ut", "key", "citationkey"]),
+    (
+        Col::Journal,
+        &[
+            "journal",
+            "journaltitle",
+            "sourcetitle",
+            "source",
+            "publication",
+            "publicationtitle",
+            "jt",
+            "so",
+            "containertitle",
+        ],
+    ),
+    (
+        Col::JournalShort,
+        &[
+            "abbreviatedsourcetitle",
+            "journalabbreviation",
+            "ta",
+            "ji",
+            "j9",
+        ],
+    ),
+    (
+        Col::Year,
+        &["year", "publicationyear", "py", "pubyear", "dp"],
+    ),
+    (
+        Col::Date,
+        &["date", "publicationdate", "issued", "datepublished"],
+    ),
+    (
+        Col::Types,
+        &[
+            "publicationtype",
+            "publicationtypes",
+            "documenttype",
+            "itemtype",
+            "type",
+            "pt",
+            "dt",
+        ],
+    ),
+    (
+        Col::Id,
+        &[
+            "id",
+            "recordid",
+            "accessionnumber",
+            "refid",
+            "eid",
+            "ut",
+            "key",
+            "citationkey",
+        ],
+    ),
     (Col::Volume, &["volume", "vl", "vol"]),
     (Col::Issue, &["issue", "is", "number", "no"]),
     (Col::Pages, &["pages", "page", "pg", "pagerange"]),
@@ -169,11 +249,30 @@ const ALIASES: &[(Col, &[&str])] = &[
     (Col::Isbn, &["isbn", "isbns", "bn"]),
     (Col::Issn, &["issn", "sn"]),
     (Col::Url, &["url", "link", "ur"]),
-    (Col::Keywords, &["keywords", "authorkeywords", "kw", "de", "manualtags", "tags"]),
-    (Col::IndexKeywords, &["indexkeywords", "automatictags", "meshterms", "mh"]),
+    (
+        Col::Keywords,
+        &[
+            "keywords",
+            "authorkeywords",
+            "kw",
+            "de",
+            "manualtags",
+            "tags",
+        ],
+    ),
+    (
+        Col::IndexKeywords,
+        &["indexkeywords", "automatictags", "meshterms", "mh"],
+    ),
     (Col::Publisher, &["publisher", "pu", "pb"]),
-    (Col::Place, &["place", "publisherplace", "location", "cy", "pi"]),
-    (Col::Language, &["language", "languageoforiginaldocument", "la", "lang"]),
+    (
+        Col::Place,
+        &["place", "publisherplace", "location", "cy", "pi"],
+    ),
+    (
+        Col::Language,
+        &["language", "languageoforiginaldocument", "la", "lang"],
+    ),
     (Col::Note, &["note", "notes", "n1", "extra"]),
     (Col::Database, &["database", "db", "librarycatalog"]),
     (Col::Edition, &["edition", "et"]),
@@ -186,7 +285,11 @@ fn columns(header: &[String]) -> Vec<(Col, usize)> {
     let mut taken = vec![false; keys.len()];
     for (col, names) in ALIASES {
         for name in *names {
-            if let Some(i) = keys.iter().enumerate().position(|(i, k)| k == name && !taken[i]) {
+            if let Some(i) = keys
+                .iter()
+                .enumerate()
+                .position(|(i, k)| k == name && !taken[i])
+            {
                 found.push((*col, i));
                 taken[i] = true;
                 break;
@@ -224,28 +327,43 @@ fn author_list(cell: &str) -> Vec<Name> {
         return Vec::new();
     }
     // Older Scopus exports separate "Wainwright C.E., Elborn J.S." with commas.
-    let parts = if !t.contains(';') && !t.contains('\n') && t.split(',').count() > 1 && t.split(',').all(|p| {
-        let w: Vec<&str> = p.split_whitespace().collect();
-        w.len() >= 2 && crate::names::is_initials(w[w.len() - 1])
-    }) {
+    let parts = if !t.contains(';')
+        && !t.contains('\n')
+        && t.split(',').count() > 1
+        && t.split(',').all(|p| {
+            let w: Vec<&str> = p.split_whitespace().collect();
+            w.len() >= 2 && crate::names::is_initials(w[w.len() - 1])
+        }) {
         t.split(',').map(|s| s.trim().to_string()).collect()
     } else {
         split_name_list(t)
     };
-    parts.iter().map(|p| parse_name(strip_author_id(p))).filter(|n| !n.is_empty()).collect()
+    parts
+        .iter()
+        .map(|p| parse_name(strip_author_id(p)))
+        .filter(|n| !n.is_empty())
+        .collect()
 }
 
 fn split_list(cell: &str) -> Vec<String> {
-    cell.split([';', '\n']).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
+    cell.split([';', '\n'])
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
 }
 
 fn kind_from_type(t: &str) -> Option<&'static str> {
     let l = t.trim().to_lowercase();
     Some(match l.as_str() {
-        "article" | "journal article" | "journalarticle" | "article-journal" | "review" | "letter" | "editorial" | "note" | "short survey" | "erratum" | "data paper" => "article-journal",
+        "article" | "journal article" | "journalarticle" | "article-journal" | "review"
+        | "letter" | "editorial" | "note" | "short survey" | "erratum" | "data paper" => {
+            "article-journal"
+        }
         "book" => "book",
         "book chapter" | "chapter" | "booksection" | "book section" => "chapter",
-        "conference paper" | "conference review" | "conferencepaper" | "proceedings paper" | "paper-conference" => "paper-conference",
+        "conference paper" | "conference review" | "conferencepaper" | "proceedings paper"
+        | "paper-conference" => "paper-conference",
         "report" | "technical report" => "report",
         "thesis" | "dissertation" => "thesis",
         "web page" | "webpage" => "webpage",
@@ -264,31 +382,76 @@ pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
     let rows = rows(text, delim, true, diags);
     if rows.is_empty() {
         if !text.trim().is_empty() {
-            diags.push(Diagnostic::error("csv.no-header", "The file has no header row"));
+            diags.push(Diagnostic::error(
+                "csv.no-header",
+                "The file has no header row",
+            ));
         }
         return Vec::new();
     }
-    let Some(start) = rows.iter().take(10).position(|r| is_record_header(&r.cells)) else {
-        let named: Vec<&str> = rows[0].cells.iter().map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
-        diags.push(Diagnostic::error("csv.no-title-column", format!("A table of records needs a Title column; the first row has {}", named.join(", "))).at(rows[0].line));
+    let Some(start) = rows
+        .iter()
+        .take(10)
+        .position(|r| is_record_header(&r.cells))
+    else {
+        let named: Vec<&str> = rows[0]
+            .cells
+            .iter()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .collect();
+        diags.push(
+            Diagnostic::error(
+                "csv.no-title-column",
+                format!(
+                    "A table of records needs a Title column; the first row has {}",
+                    named.join(", ")
+                ),
+            )
+            .at(rows[0].line),
+        );
         return Vec::new();
     };
     for skipped in &rows[..start] {
-        diags.push(Diagnostic::info("csv.skipped-row", "Skipped a row above the header").at(skipped.line));
+        diags.push(
+            Diagnostic::info("csv.skipped-row", "Skipped a row above the header").at(skipped.line),
+        );
     }
     let header = &rows[start].cells;
     let cols = columns(header);
     let known: Vec<usize> = cols.iter().map(|(_, i)| *i).collect();
     let mut out = Vec::new();
     for (index, row) in rows[start + 1..].iter().enumerate() {
-        if row.cells.len() > header.len() && row.cells[header.len()..].iter().any(|c| !c.trim().is_empty()) {
+        if row.cells.len() > header.len()
+            && row.cells[header.len()..]
+                .iter()
+                .any(|c| !c.trim().is_empty())
+        {
             diags.push(
-                Diagnostic::warning("csv.extra-cells", format!("Row has {} cells and the header {}; kept the extra cells as source fields", row.cells.len(), header.len()))
-                    .at(row.line)
-                    .record(index),
+                Diagnostic::warning(
+                    "csv.extra-cells",
+                    format!(
+                        "Row has {} cells and the header {}; kept the extra cells as source fields",
+                        row.cells.len(),
+                        header.len()
+                    ),
+                )
+                .at(row.line)
+                .record(index),
             );
         } else if row.cells.len() < header.len() && row.cells.len() > 1 {
-            diags.push(Diagnostic::info("csv.short-row", format!("Row has {} cells and the header {}", row.cells.len(), header.len())).at(row.line).record(index));
+            diags.push(
+                Diagnostic::info(
+                    "csv.short-row",
+                    format!(
+                        "Row has {} cells and the header {}",
+                        row.cells.len(),
+                        header.len()
+                    ),
+                )
+                .at(row.line)
+                .record(index),
+            );
         }
         let cell = |c: Col| -> Option<String> {
             let i = cols.iter().find(|(x, _)| *x == c)?.1;
@@ -312,15 +475,29 @@ pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
             (None, Some(s)) => author_list(&s),
             _ => Vec::new(),
         };
-        r.editor = cell(Col::Editors).map(|e| author_list(&e)).unwrap_or_default();
+        r.editor = cell(Col::Editors)
+            .map(|e| author_list(&e))
+            .unwrap_or_default();
         r.container_title = cell(Col::Journal);
         r.container_title_short = cell(Col::JournalShort);
-        r.issued = cell(Col::Date).and_then(|d| parse_date(&d)).or_else(|| cell(Col::Year).and_then(|y| parse_date(y.trim_end_matches(".0"))));
+        r.issued = cell(Col::Date)
+            .and_then(|d| parse_date(&d))
+            .or_else(|| cell(Col::Year).and_then(|y| parse_date(y.trim_end_matches(".0"))));
         if let Some(t) = cell(Col::Types) {
             r.publication_types = split_list(&t);
-            r.kind = r.publication_types.iter().find_map(|t| kind_from_type(t)).unwrap_or("article-journal").to_string();
+            r.kind = r
+                .publication_types
+                .iter()
+                .find_map(|t| kind_from_type(t))
+                .unwrap_or("article-journal")
+                .to_string();
         } else {
-            r.kind = if r.container_title.is_some() { "article-journal" } else { "document" }.to_string();
+            r.kind = if r.container_title.is_some() {
+                "article-journal"
+            } else {
+                "document"
+            }
+            .to_string();
         }
         let id = cell(Col::Id);
         r.volume = cell(Col::Volume);
@@ -337,7 +514,9 @@ pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
         r.isbn = cell(Col::Isbn);
         r.issn = cell(Col::Issn);
         r.url = cell(Col::Url);
-        r.keywords = cell(Col::Keywords).map(|k| split_list(&k)).unwrap_or_default();
+        r.keywords = cell(Col::Keywords)
+            .map(|k| split_list(&k))
+            .unwrap_or_default();
         if let Some(k) = cell(Col::IndexKeywords) {
             r.keywords.extend(split_list(&k));
         }
@@ -351,7 +530,11 @@ pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
             if known.contains(&i) || v.trim().is_empty() {
                 continue;
             }
-            let name = header.get(i).map(|h| h.trim().to_string()).filter(|h| !h.is_empty()).unwrap_or_else(|| format!("column {}", i + 1));
+            let name = header
+                .get(i)
+                .map(|h| h.trim().to_string())
+                .filter(|h| !h.is_empty())
+                .unwrap_or_else(|| format!("column {}", i + 1));
             r.keep(FORMAT, &name, v.trim());
         }
         if let Some(eid) = id.as_deref().filter(|e| e.starts_with("2-s2.0-")) {
@@ -374,7 +557,12 @@ mod tests {
     #[test]
     fn rfc4180() {
         let mut d = Vec::new();
-        let r = rows("a,\"b,c\",\"d \"\"e\"\"\"\n\"multi\nline\",x\n\n", ',', true, &mut d);
+        let r = rows(
+            "a,\"b,c\",\"d \"\"e\"\"\"\n\"multi\nline\",x\n\n",
+            ',',
+            true,
+            &mut d,
+        );
         assert_eq!(r.len(), 2);
         assert_eq!(r[0].cells, vec!["a", "b,c", "d \"e\""]);
         assert_eq!(r[1].cells, vec!["multi\nline", "x"]);
@@ -405,6 +593,9 @@ mod tests {
         let refs = read(src, &mut d);
         assert_eq!(refs[0].author.len(), 2);
         assert_eq!(refs[0].doi.as_deref(), Some("10.5555/y"));
-        assert!(refs[0].source_fields.iter().any(|f| f.name == "Nr" && f.value == "1"));
+        assert!(refs[0]
+            .source_fields
+            .iter()
+            .any(|f| f.name == "Nr" && f.value == "1"));
     }
 }

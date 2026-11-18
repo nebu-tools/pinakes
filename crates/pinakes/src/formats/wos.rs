@@ -15,7 +15,10 @@ use crate::normalise::finish;
 pub const FORMAT: &str = "wos";
 
 /// Tags whose continuation lines are separate items.
-const LIST_TAGS: &[&str] = &["AU", "AF", "BA", "BF", "BE", "GP", "CA", "CR", "C1", "C3", "RP", "EM", "RI", "OI", "FU", "WC", "SC"];
+const LIST_TAGS: &[&str] = &[
+    "AU", "AF", "BA", "BF", "BE", "GP", "CA", "CR", "C1", "C3", "RP", "EM", "RI", "OI", "FU", "WC",
+    "SC",
+];
 
 struct Raw {
     line: usize,
@@ -24,7 +27,10 @@ struct Raw {
 
 fn tag_line(line: &str) -> Option<(&str, &str)> {
     let b = line.as_bytes();
-    if b.len() < 2 || !b[0].is_ascii_uppercase() || !(b[1].is_ascii_uppercase() || b[1].is_ascii_digit()) {
+    if b.len() < 2
+        || !b[0].is_ascii_uppercase()
+        || !(b[1].is_ascii_uppercase() || b[1].is_ascii_digit())
+    {
         return None;
     }
     match b.get(2) {
@@ -37,13 +43,17 @@ fn tag_line(line: &str) -> Option<(&str, &str)> {
 /// Whether text looks like a plain-text export.
 pub(crate) fn looks_like_text(text: &str) -> bool {
     let mut lines = text.lines().map(str::trim_end).filter(|l| !l.is_empty());
-    matches!(lines.next(), Some(l) if l.starts_with("FN ")) || text.lines().take(3).any(|l| l.starts_with("PT ") ) && text.contains("\nUT ")
+    matches!(lines.next(), Some(l) if l.starts_with("FN "))
+        || text.lines().take(3).any(|l| l.starts_with("PT ")) && text.contains("\nUT ")
 }
 
 /// Whether a header row is a tab-delimited export's.
 pub(crate) fn is_tab_header(cells: &[String]) -> bool {
     let tags: Vec<&str> = cells.iter().map(|c| c.trim()).collect();
-    tags.len() >= 3 && tags.first() == Some(&"PT") && tags.contains(&"TI") && tags.iter().all(|t| t.is_empty() || tag_line(t).is_some())
+    tags.len() >= 3
+        && tags.first() == Some(&"PT")
+        && tags.contains(&"TI")
+        && tags.iter().all(|t| t.is_empty() || tag_line(t).is_some())
 }
 
 /// Read a plain-text export.
@@ -71,7 +81,13 @@ pub fn read_text(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
                         last.push_str(v);
                     }
                 }
-                None => diags.push(Diagnostic::error("wos.stray-text", "Indented text outside any record; skipped it").at(n)),
+                None => diags.push(
+                    Diagnostic::error(
+                        "wos.stray-text",
+                        "Indented text outside any record; skipped it",
+                    )
+                    .at(n),
+                ),
             }
             continue;
         }
@@ -89,7 +105,10 @@ pub fn read_text(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
             "FN" | "VR" if open.is_none() => continue,
             "EF" => {
                 if let Some(r) = open.take() {
-                    diags.push(Diagnostic::warning("wos.missing-er", "The last record has no ER line").at(r.line));
+                    diags.push(
+                        Diagnostic::warning("wos.missing-er", "The last record has no ER line")
+                            .at(r.line),
+                    );
                     raws.push(r);
                 }
                 saw_ef = true;
@@ -98,7 +117,9 @@ pub fn read_text(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
             "ER" => {
                 match open.take() {
                     Some(r) => raws.push(r),
-                    None => diags.push(Diagnostic::info("wos.stray-er", "ER without a record").at(n)),
+                    None => {
+                        diags.push(Diagnostic::info("wos.stray-er", "ER without a record").at(n))
+                    }
                 }
                 continue;
             }
@@ -106,35 +127,69 @@ pub fn read_text(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
         }
         if open.is_none() {
             if tag != "PT" {
-                diags.push(Diagnostic::warning("wos.no-pt", format!("A record starts with {tag} instead of PT")).at(n));
+                diags.push(
+                    Diagnostic::warning(
+                        "wos.no-pt",
+                        format!("A record starts with {tag} instead of PT"),
+                    )
+                    .at(n),
+                );
             }
-            open = Some(Raw { line: n, fields: Vec::new() });
+            open = Some(Raw {
+                line: n,
+                fields: Vec::new(),
+            });
         } else if tag == "PT" {
             let r = open.take().unwrap();
-            diags.push(Diagnostic::warning("wos.missing-er", "A record has no ER line; the next PT starts a new one").at(r.line));
+            diags.push(
+                Diagnostic::warning(
+                    "wos.missing-er",
+                    "A record has no ER line; the next PT starts a new one",
+                )
+                .at(r.line),
+            );
             raws.push(r);
-            open = Some(Raw { line: n, fields: Vec::new() });
+            open = Some(Raw {
+                line: n,
+                fields: Vec::new(),
+            });
         }
         last_tag_list = LIST_TAGS.contains(&tag);
-        open.as_mut().unwrap().fields.push((tag.to_string(), vec![value.to_string()]));
+        open.as_mut()
+            .unwrap()
+            .fields
+            .push((tag.to_string(), vec![value.to_string()]));
     }
     if let Some(r) = open.take() {
-        diags.push(Diagnostic::warning("wos.missing-er", "The last record has no ER line").at(r.line));
+        diags.push(
+            Diagnostic::warning("wos.missing-er", "The last record has no ER line").at(r.line),
+        );
         raws.push(r);
     }
     if !saw_ef && !raws.is_empty() {
-        diags.push(Diagnostic::info("wos.missing-ef", "The file has no EF line; it may be cut short"));
+        diags.push(Diagnostic::info(
+            "wos.missing-ef",
+            "The file has no EF line; it may be cut short",
+        ));
     }
     if raws.is_empty() && !text.trim().is_empty() {
-        diags.push(Diagnostic::error("wos.no-records", "Found no Web of Science records (a record starts with PT)"));
+        diags.push(Diagnostic::error(
+            "wos.no-records",
+            "Found no Web of Science records (a record starts with PT)",
+        ));
     }
-    raws.into_iter().enumerate().map(|(i, raw)| to_reference(raw, i, diags)).collect()
+    raws.into_iter()
+        .enumerate()
+        .map(|(i, raw)| to_reference(raw, i, diags))
+        .collect()
 }
 
 /// Read a tab-delimited export (already decoded from UTF-16).
 pub fn read_tab(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
     let rows = super::csv::rows(text, '\t', false, diags);
-    let Some(header) = rows.first() else { return Vec::new() };
+    let Some(header) = rows.first() else {
+        return Vec::new();
+    };
     let tags: Vec<String> = header.cells.iter().map(|c| c.trim().to_string()).collect();
     let mut out = Vec::new();
     for (index, row) in rows[1..].iter().enumerate() {
@@ -144,13 +199,39 @@ pub fn read_tab(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
             if v.is_empty() {
                 continue;
             }
-            let tag = tags.get(i).cloned().unwrap_or_else(|| format!("column {}", i + 1));
-            let values = if LIST_TAGS.contains(&tag.as_str()) { v.split("; ").map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect() } else { vec![v.to_string()] };
+            let tag = tags
+                .get(i)
+                .cloned()
+                .unwrap_or_else(|| format!("column {}", i + 1));
+            let values = if LIST_TAGS.contains(&tag.as_str()) {
+                v.split("; ")
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            } else {
+                vec![v.to_string()]
+            };
             fields.push((tag, values));
         }
-        let mut r = to_reference(Raw { line: row.line, fields }, index, diags);
-        if row.cells.len() > tags.len() && row.cells[tags.len()..].iter().any(|c| !c.trim().is_empty()) {
-            diags.push(Diagnostic::warning("wos.extra-cells", "Row has more cells than the header; kept them as source fields").at(row.line).record(index));
+        let mut r = to_reference(
+            Raw {
+                line: row.line,
+                fields,
+            },
+            index,
+            diags,
+        );
+        if row.cells.len() > tags.len()
+            && row.cells[tags.len()..].iter().any(|c| !c.trim().is_empty())
+        {
+            diags.push(
+                Diagnostic::warning(
+                    "wos.extra-cells",
+                    "Row has more cells than the header; kept them as source fields",
+                )
+                .at(row.line)
+                .record(index),
+            );
         }
         r.id = r.accession.clone().unwrap_or(r.id);
         out.push(r);
@@ -215,12 +296,24 @@ fn to_reference(raw: Raw, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
                 r.keep(FORMAT, &tag, v);
             }
             "JI" => r.container_title_short = Some(v.to_string()),
-            "DT" => r.publication_types = v.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect(),
+            "DT" => {
+                r.publication_types = v
+                    .split(';')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty())
+                    .collect()
+            }
             "LA" => r.language = Some(v.to_string()),
-            "DE" => r.keywords.extend(v.split(';').map(|s| s.trim().to_string()).filter(|s| !s.is_empty())),
+            "DE" => r.keywords.extend(
+                v.split(';')
+                    .map(|s| s.trim().to_string())
+                    .filter(|s| !s.is_empty()),
+            ),
             "AB" => r.abstract_text = Some(v.to_string()),
             "PU" => r.publisher = Some(v.to_string()),
-            "PI" | "PA" if r.publisher_place.is_none() && tag == "PI" => r.publisher_place = Some(v.to_string()),
+            "PI" | "PA" if r.publisher_place.is_none() && tag == "PI" => {
+                r.publisher_place = Some(v.to_string())
+            }
             "SN" | "EI" => issn.push(v.to_string()),
             "BN" => r.isbn = Some(v.to_string()),
             "PY" => py = v.parse::<i32>().ok(),
@@ -238,7 +331,11 @@ fn to_reference(raw: Raw, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
                 r.database = Some("Web of Science".into());
             }
             _ => {
-                let value = if LIST_TAGS.contains(&tag.as_str()) { values.join("\n") } else { v.to_string() };
+                let value = if LIST_TAGS.contains(&tag.as_str()) {
+                    values.join("\n")
+                } else {
+                    v.to_string()
+                };
                 r.keep(FORMAT, &tag, &value);
             }
         }
@@ -255,13 +352,21 @@ fn to_reference(raw: Raw, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
         }
         au
     };
-    r.author = people.iter().map(|p| parse_name(p)).filter(|n| !n.is_empty()).collect();
+    r.author = people
+        .iter()
+        .map(|p| parse_name(p))
+        .filter(|n| !n.is_empty())
+        .collect();
     for g in groups.iter().chain(&corporate) {
         if !g.trim().is_empty() {
             r.author.push(Name::literal(g.trim()));
         }
     }
-    r.editor = be.iter().map(|p| parse_name(p)).filter(|n| !n.is_empty()).collect();
+    r.editor = be
+        .iter()
+        .map(|p| parse_name(p))
+        .filter(|n| !n.is_empty())
+        .collect();
     for s in issn {
         if r.issn.is_none() {
             r.issn = Some(s);
@@ -295,9 +400,16 @@ fn to_reference(raw: Raw, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
     if let Some(p) = pt {
         r.keep(FORMAT, "PT", &p);
     }
-    r.id = r.accession.clone().unwrap_or_else(|| (index + 1).to_string());
+    r.id = r
+        .accession
+        .clone()
+        .unwrap_or_else(|| (index + 1).to_string());
     if r.accession.is_none() {
-        diags.push(Diagnostic::warning("wos.no-ut", "A record has no UT accession number").at(raw.line).record(index));
+        diags.push(
+            Diagnostic::warning("wos.no-ut", "A record has no UT accession number")
+                .at(raw.line)
+                .record(index),
+        );
     }
     finish(&mut r, index, Some(raw.line), diags);
     r
@@ -338,7 +450,10 @@ mod tests {
         assert_eq!(r.page.as_deref(), Some("1002-1013"));
         assert_eq!(r.issued.as_ref().unwrap().start.unwrap().month, Some(7));
         assert_eq!(r.id, "WOS:000000000000001");
-        assert!(d.iter().all(|x| x.severity != crate::diag::Severity::Error), "{d:?}");
+        assert!(
+            d.iter().all(|x| x.severity != crate::diag::Severity::Error),
+            "{d:?}"
+        );
     }
 
     #[test]

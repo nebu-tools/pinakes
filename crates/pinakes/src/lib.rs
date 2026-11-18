@@ -49,7 +49,9 @@ pub struct Library {
 impl Library {
     /// Whether any diagnostic is an error: input that was skipped or could not be read as meant.
     pub fn has_errors(&self) -> bool {
-        self.diagnostics.iter().any(|d| d.severity == Severity::Error)
+        self.diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
     }
 }
 
@@ -74,13 +76,24 @@ fn read_decoded(text: &str, format: Option<Format>, mut diagnostics: Vec<Diagnos
         Some(f) => f,
         None => {
             if !text.trim().is_empty() {
-                diagnostics.push(Diagnostic::error("format.unknown", "Could not tell the format of the input; name it explicitly"));
+                diagnostics.push(Diagnostic::error(
+                    "format.unknown",
+                    "Could not tell the format of the input; name it explicitly",
+                ));
             }
-            return Library { references: Vec::new(), diagnostics, format: None };
+            return Library {
+                references: Vec::new(),
+                diagnostics,
+                format: None,
+            };
         }
     };
     let references = formats::read_text(format, text, &mut diagnostics);
-    Library { references, diagnostics, format: Some(format) }
+    Library {
+        references,
+        diagnostics,
+        format: Some(format),
+    }
 }
 
 /// A format that Pinakes reads but does not write.

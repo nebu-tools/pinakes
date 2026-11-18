@@ -13,7 +13,14 @@ use serde_json::{json, Map, Value};
 pub fn to_value(r: &Reference) -> Value {
     let mut m = Map::new();
     m.insert("id".into(), Value::String(r.id.clone()));
-    m.insert("type".into(), Value::String(if r.kind.is_empty() { "document".into() } else { r.kind.clone() }));
+    m.insert(
+        "type".into(),
+        Value::String(if r.kind.is_empty() {
+            "document".into()
+        } else {
+            r.kind.clone()
+        }),
+    );
     let mut put = |k: &str, v: &Option<String>| {
         if let Some(v) = v {
             m.insert(k.into(), Value::String(v.clone()));
@@ -46,10 +53,16 @@ pub fn to_value(r: &Reference) -> Value {
         m.insert("keyword".into(), Value::String(r.keywords.join(", ")));
     }
     if !r.author.is_empty() {
-        m.insert("author".into(), Value::Array(r.author.iter().map(name_value).collect()));
+        m.insert(
+            "author".into(),
+            Value::Array(r.author.iter().map(name_value).collect()),
+        );
     }
     if !r.editor.is_empty() {
-        m.insert("editor".into(), Value::Array(r.editor.iter().map(name_value).collect()));
+        m.insert(
+            "editor".into(),
+            Value::Array(r.editor.iter().map(name_value).collect()),
+        );
     }
     if let Some(d) = &r.issued {
         m.insert("issued".into(), date_value(d));
@@ -186,9 +199,21 @@ fn part(v: &Value) -> Option<i64> {
 fn parse_ymd(v: &Value) -> Option<Ymd> {
     let a = v.as_array()?;
     let year = part(a.first()?)? as i32;
-    let month = a.get(1).and_then(part).filter(|m| (1..=12).contains(m)).map(|m| m as u8);
-    let day = a.get(2).and_then(part).filter(|d| (1..=31).contains(d)).map(|d| d as u8);
-    Some(Ymd { year, month, day: month.and(day) })
+    let month = a
+        .get(1)
+        .and_then(part)
+        .filter(|m| (1..=12).contains(m))
+        .map(|m| m as u8);
+    let day = a
+        .get(2)
+        .and_then(part)
+        .filter(|d| (1..=31).contains(d))
+        .map(|d| d as u8);
+    Some(Ymd {
+        year,
+        month,
+        day: month.and(day),
+    })
 }
 
 pub(crate) fn parse_date_value(v: &Value) -> Option<Date> {
@@ -201,8 +226,10 @@ pub(crate) fn parse_date_value(v: &Value) -> Option<Date> {
                 d.start = parts.first().and_then(parse_ymd);
                 d.end = parts.get(1).and_then(parse_ymd);
             }
-            d.circa = matches!(o.get("circa"), Some(Value::Bool(true)) | Some(Value::Number(_)))
-                || matches!(o.get("circa"), Some(Value::String(s)) if !s.is_empty());
+            d.circa = matches!(
+                o.get("circa"),
+                Some(Value::Bool(true)) | Some(Value::Number(_))
+            ) || matches!(o.get("circa"), Some(Value::String(s)) if !s.is_empty());
             d.literal = o.get("literal").and_then(string_of);
             d.raw = o.get("raw").and_then(string_of);
             if d.start.is_none() {
@@ -223,17 +250,135 @@ pub(crate) fn parse_date_value(v: &Value) -> Option<Date> {
     }
 }
 
+/// The CSL fields Pinakes reads as text.
+const KNOWN_TEXT: &[&str] = &[
+    "type",
+    "citation-key",
+    "citation_key",
+    "title",
+    "title-short",
+    "shortTitle",
+    "container-title",
+    "container-title-short",
+    "journalAbbreviation",
+    "collection-title",
+    "publisher",
+    "publisher-place",
+    "volume",
+    "issue",
+    "number",
+    "page",
+    "edition",
+    "genre",
+    "abstract",
+    "language",
+    "note",
+    "URL",
+    "url",
+    "DOI",
+    "doi",
+    "PMID",
+    "pmid",
+    "PMCID",
+    "pmcid",
+    "ISBN",
+    "isbn",
+    "ISSN",
+    "issn",
+];
+
+/// The line each element of a top-level JSON array starts on. Empty when the text is not
+/// an array.
+fn item_lines(text: &str) -> Vec<usize> {
+    let mut lines = Vec::new();
+    let (mut depth, mut line, mut in_string, mut escaped, mut expect_item) =
+        (0usize, 1usize, false, false, false);
+    for c in text.chars() {
+        if c == '\n' {
+            line += 1;
+        }
+        if in_string {
+            match c {
+                _ if escaped => escaped = false,
+                '\\' => escaped = true,
+                '"' => in_string = false,
+                _ => {}
+            }
+            continue;
+        }
+        if depth == 1 && expect_item && !c.is_whitespace() && c != ']' {
+            lines.push(line);
+            expect_item = false;
+        }
+        match c {
+            '"' => in_string = true,
+            '[' | '{' => {
+                depth += 1;
+                if depth == 1 {
+                    if c == '{' {
+                        return Vec::new();
+                    }
+                    expect_item = true;
+                }
+            }
+            ']' | '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 1 => expect_item = true,
+            _ => {}
+        }
+    }
+    lines
+}
+
 /// Read one CSL-JSON item. Fields Pinakes does not model go to `extra`.
-pub fn from_value(v: &Value, ordinal: usize, diags: &mut Vec<Diagnostic>) -> Option<Reference> {
+/// `line` is where the item starts in the text, when it is known.
+pub fn from_value(
+    v: &Value,
+    ordinal: usize,
+    line: Option<usize>,
+    diags: &mut Vec<Diagnostic>,
+) -> Option<Reference> {
+    let at = |d: Diagnostic| {
+        let d = d.record(ordinal);
+        match line {
+            Some(l) => d.at(l),
+            None => d,
+        }
+    };
     let Value::Object(o) = v else {
-        diags.push(
-            Diagnostic::error("csl.not-an-object", format!("Item {} is not a JSON object; skipped it", ordinal + 1))
-                .record(ordinal),
-        );
+        diags.push(at(Diagnostic::error(
+            "csl.not-an-object",
+            format!("Item {} is not a JSON object; skipped it", ordinal + 1),
+        )));
         return None;
     };
-    let mut r = Reference { id: o.get("id").and_then(string_of).unwrap_or_else(|| (ordinal + 1).to_string()), ..Reference::default() };
+    let mut r = Reference {
+        id: o
+            .get("id")
+            .and_then(string_of)
+            .unwrap_or_else(|| (ordinal + 1).to_string()),
+        ..Reference::default()
+    };
     for (k, val) in o {
+        if KNOWN_TEXT.contains(&k.as_str())
+            && !matches!(val, Value::String(_) | Value::Number(_) | Value::Null)
+        {
+            // CSL says these are strings. Keep the value as it came rather than guess.
+            diags.push(at(Diagnostic::warning(
+                "csl.wrong-type",
+                format!("Item {}: {k:?} should be a string; kept it unread", r.id),
+            )));
+            r.extra.insert(k.clone(), val.clone());
+            continue;
+        }
+        if matches!(k.as_str(), "author" | "editor") && !val.is_array() {
+            diags.push(at(Diagnostic::warning(
+                "csl.wrong-type",
+                format!(
+                    "Item {}: {k:?} should be a list of names; read it as one name",
+                    r.id
+                ),
+            )));
+        }
         let s = || string_of(val);
         match k.as_str() {
             "id" => {}
@@ -264,7 +409,10 @@ pub fn from_value(v: &Value, ordinal: usize, diags: &mut Vec<Diagnostic>) -> Opt
             "keyword" => {
                 r.keywords = match val {
                     Value::Array(a) => a.iter().filter_map(string_of).collect(),
-                    Value::String(s) => s.split([',', ';']).filter_map(crate::text::non_empty).collect(),
+                    Value::String(s) => s
+                        .split([',', ';'])
+                        .filter_map(crate::text::non_empty)
+                        .collect(),
                     _ => Vec::new(),
                 }
             }
@@ -298,8 +446,17 @@ pub fn from_value(v: &Value, ordinal: usize, diags: &mut Vec<Diagnostic>) -> Opt
                             "source-fields" => {
                                 if let Value::Array(a) = cv {
                                     for f in a {
-                                        let get = |key: &str| f.get(key).and_then(Value::as_str).unwrap_or_default().to_string();
-                                        r.source_fields.push(SourceField { format: get("format"), name: get("name"), value: get("value") });
+                                        let get = |key: &str| {
+                                            f.get(key)
+                                                .and_then(Value::as_str)
+                                                .unwrap_or_default()
+                                                .to_string()
+                                        };
+                                        r.source_fields.push(SourceField {
+                                            format: get("format"),
+                                            name: get("name"),
+                                            value: get("value"),
+                                        });
                                     }
                                 }
                             }
@@ -321,29 +478,14 @@ pub fn from_value(v: &Value, ordinal: usize, diags: &mut Vec<Diagnostic>) -> Opt
         }
     }
     if r.kind.is_empty() {
-        diags.push(Diagnostic::warning("csl.no-type", format!("Item {} has no type; wrote it as \"document\"", r.id)).record(ordinal));
+        diags.push(at(Diagnostic::warning(
+            "csl.no-type",
+            format!("Item {} has no type; wrote it as \"document\"", r.id),
+        )));
         r.kind = "document".into();
     }
-    identifiers_from_note(&mut r);
+    crate::normalise::finish(&mut r, ordinal, line, diags);
     Some(r)
-}
-
-/// Zotero writes identifiers it has no field for into `note` (its "Extra" field), one
-/// `Key: value` per line. Read them, leaving the note as it is.
-pub(crate) fn identifiers_from_note(r: &mut Reference) {
-    let Some(note) = r.note.clone() else { return };
-    for line in note.lines() {
-        let Some((k, v)) = line.split_once(':') else { continue };
-        let v = v.trim();
-        match k.trim().to_ascii_lowercase().as_str() {
-            "pmid" if r.pmid.is_none() => r.pmid = crate::text::non_empty(v),
-            "pmcid" if r.pmcid.is_none() => r.pmcid = crate::text::non_empty(v),
-            "doi" if r.doi.is_none() => r.doi = crate::text::non_empty(v),
-            "arxiv" | "arxiv id" if r.arxiv.is_none() => r.arxiv = crate::text::non_empty(v),
-            "citation key" if r.citation_key.is_none() => r.citation_key = crate::text::non_empty(v),
-            _ => {}
-        }
-    }
 }
 
 /// Read a CSL-JSON document: an array of items, `{"items": [...]}`, or one item.
@@ -351,7 +493,9 @@ pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
     let value: Value = match serde_json::from_str(text) {
         Ok(v) => v,
         Err(e) => {
-            diags.push(Diagnostic::error("csl.bad-json", format!("Not valid JSON: {e}")).at(e.line()));
+            diags.push(
+                Diagnostic::error("csl.bad-json", format!("Not valid JSON: {e}")).at(e.line()),
+            );
             return Vec::new();
         }
     };
@@ -362,17 +506,31 @@ pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
             _ => vec![&value],
         },
         _ => {
-            diags.push(Diagnostic::error("csl.not-a-list", "CSL-JSON must be a list of items or one item"));
+            diags.push(Diagnostic::error(
+                "csl.not-a-list",
+                "CSL-JSON must be a list of items or one item",
+            ));
             Vec::new()
         }
     };
-    items.into_iter().enumerate().filter_map(|(i, v)| from_value(v, i, diags)).collect()
+    let lines = item_lines(text);
+    let single =
+        matches!(value, Value::Object(_)) && !matches!(value.get("items"), Some(Value::Array(_)));
+    items
+        .into_iter()
+        .enumerate()
+        .filter_map(|(i, v)| {
+            let line = lines.get(i).copied().or(single.then_some(1));
+            from_value(v, i, line, diags)
+        })
+        .collect()
 }
 
 /// Write CSL-JSON: a pretty-printed array.
 pub fn write(refs: &[Reference]) -> String {
     let items: Vec<Value> = refs.iter().map(to_value).collect();
-    let mut out = serde_json::to_string_pretty(&Value::Array(items)).unwrap_or_else(|_| "[]".into());
+    let mut out =
+        serde_json::to_string_pretty(&Value::Array(items)).unwrap_or_else(|_| "[]".into());
     out.push('\n');
     out
 }
