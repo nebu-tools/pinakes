@@ -1,0 +1,32 @@
+{
+  "name": "pinakes",
+  "version": "0.1.0",
+  "description": "Read, write, normalise and de-duplicate bibliographic references",
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/nebu-tools/pinakes.git",
+    "directory": "bindings/wasm"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "types": "./js/index.d.ts",
+      "default": "./js/index.js"
+    },
+    "./web": {
+      "types": "./js/web.d.ts",
+      "default": "./js/web.js"
+    }
+  },
+  "files": [
+    "js",
+    "pkg/pinakes_wasm.js",
+    "pkg/pinakes_wasm_bg.wasm"
+  ],
+  "scripts": {
+    "build": "sh build.sh",
+    "test": "node --test test/ && bun test",
+    "typecheck": "npx -y -p typescript@5.9.3 tsc -p ."
+  }
+}

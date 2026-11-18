@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/pinakes", "crates/pinakes-cli"]
+members = ["crates/pinakes", "crates/pinakes-cli", "bindings/wasm"]
 default-members = ["crates/pinakes", "crates/pinakes-cli"]
 
 [workspace.package]
@@ -23,4 +23,4 @@ codegen-units = 1
 inherits = "release"
 opt-level = "s"
 panic = "abort"
-strip = true
+strip = "debuginfo"
