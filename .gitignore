@@ -1,0 +1,6 @@
+/target
+/bindings/wasm/pkg
+/bindings/python/.venv
+__pycache__/
+*.so
+/fixtures/generated
