@@ -219,51 +219,6 @@ pub fn fold_for_key(s: &str) -> String {
     out
 }
 
-/// Fold text for comparison: compatibility-decomposed, marks stripped, lower case, every run of
-/// characters that are not letters or digits turned into one space.
-pub fn fold_for_match(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut space = true;
-    for c in s.nfkd() {
-        if is_combining_mark(c) {
-            continue;
-        }
-        let c = match c {
-            'ß' => {
-                out.push_str("ss");
-                space = false;
-                continue;
-            }
-            'æ' | 'Æ' => {
-                out.push_str("ae");
-                space = false;
-                continue;
-            }
-            'œ' | 'Œ' => {
-                out.push_str("oe");
-                space = false;
-                continue;
-            }
-            'ø' | 'Ø' => 'o',
-            'ł' | 'Ł' => 'l',
-            'đ' | 'Đ' => 'd',
-            'ı' => 'i',
-            c => c,
-        };
-        if c.is_alphanumeric() {
-            out.extend(c.to_lowercase());
-            space = false;
-        } else if !space {
-            out.push(' ');
-            space = true;
-        }
-    }
-    if out.ends_with(' ') {
-        out.pop();
-    }
-    out
-}
-
 fn special_fold(c: char) -> Option<&'static str> {
     Some(match c {
         'ä' | 'Ä' => "ae",
@@ -403,11 +358,6 @@ pub fn non_empty(s: &str) -> Option<String> {
     (!t.is_empty()).then(|| t.to_string())
 }
 
-/// NFC form.
-pub fn nfc(s: &str) -> String {
-    s.nfc().collect()
-}
-
 /// Byte offset to 1-based line number.
 pub(crate) struct LineIndex {
     starts: Vec<usize>,
@@ -441,12 +391,6 @@ mod tests {
         assert_eq!(fold_for_key("Müller"), "mueller");
         assert_eq!(fold_for_key("Достоевский"), "dostoevskiy");
         assert_eq!(fold_for_key("Σωκράτης"), "sokratis");
-    }
-
-    #[test]
-    fn match_folding_drops_marks_and_punctuation() {
-        assert_eq!(fold_for_match("Rodríguez,  J.-P."), "rodriguez j p");
-        assert_eq!(fold_for_match("A Study: of  Moths!"), "a study of moths");
     }
 
     #[test]

@@ -55,16 +55,6 @@ impl Element {
         Some(at)
     }
 
-    /// Every element below this one with this name, depth first.
-    pub fn descendants<'a>(&'a self, name: &'a str, out: &mut Vec<&'a Element>) {
-        for e in self.elements() {
-            if e.name == name {
-                out.push(e);
-            }
-            e.descendants(name, out);
-        }
-    }
-
     /// All text below this element, with inline markup (`<i>`, `<sup>`) kept as CSL HTML
     /// when `markup` is set.
     pub fn text(&self, markup: bool) -> String {

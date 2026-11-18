@@ -17,20 +17,22 @@
 //! assert!(bib.starts_with("@article{okafor2019moths,"));
 //! ```
 
-pub mod dates;
-pub mod dedupe;
-pub mod diag;
-pub mod formats;
+mod dates;
+mod dedupe;
+mod diag;
+mod formats;
 pub mod id;
-pub mod key;
-pub mod model;
-pub mod names;
-pub mod normalise;
-pub mod text;
+mod json;
+mod key;
+mod model;
+mod names;
+mod normalise;
+mod text;
 
 pub use dedupe::{find_duplicates, Candidate, Duplicates, Group, Reason, Relation};
 pub use diag::{Diagnostic, Severity};
 pub use formats::{Format, UnknownFormat};
+pub use id::IdKind;
 pub use key::{assign_keys, key_for};
 pub use model::{Date, Name, Reference, SourceField, Ymd};
 pub use normalise::normalise;

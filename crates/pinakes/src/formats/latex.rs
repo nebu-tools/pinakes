@@ -448,7 +448,10 @@ pub fn text_to_latex(s: &str, ascii: bool, protect: bool) -> String {
     let words = split_keep(&s);
     for w in words {
         let needs_protect = protect
-            && w.chars().skip(1).any(|c| c.is_uppercase())
+            && w.chars()
+                .skip_while(|c| !c.is_alphabetic())
+                .skip(1)
+                .any(|c| c.is_uppercase())
             && w.chars().any(|c| c.is_alphabetic())
             && !w.contains(['\\', '\u{1}']);
         if needs_protect {

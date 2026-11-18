@@ -316,7 +316,8 @@ fn lcs(a: &[char], b: &[char]) -> usize {
 }
 
 /// rapidfuzz's `ratio`: normalised Indel similarity, 0 to 100.
-pub fn ratio(a: &str, b: &str) -> f64 {
+#[cfg(test)]
+fn ratio(a: &str, b: &str) -> f64 {
     let a: Vec<char> = a.chars().collect();
     let b: Vec<char> = b.chars().collect();
     ratio_chars(&a, &b)
@@ -331,7 +332,8 @@ fn ratio_chars(a: &[char], b: &[char]) -> f64 {
 }
 
 /// rapidfuzz's `token_sort_ratio` on kittum-normalised titles.
-pub fn title_score(a: &str, b: &str) -> f64 {
+#[cfg(test)]
+fn title_score(a: &str, b: &str) -> f64 {
     let sort = |t: &str| {
         let n = normalise_title(t);
         let mut w: Vec<&str> = n.split(' ').filter(|w| !w.is_empty()).collect();
@@ -512,7 +514,8 @@ fn tokens_conflict(a: &Facts, b: &Facts) -> bool {
 }
 
 /// Whether two titles name different study acronyms, phases, follow-up times or study numbers.
-pub fn titles_conflict(a: &str, b: &str) -> bool {
+#[cfg(test)]
+fn titles_conflict(a: &str, b: &str) -> bool {
     let fa = facts(&Reference {
         title: Some(a.into()),
         ..Reference::default()
@@ -614,7 +617,8 @@ fn compare(i: usize, j: usize, a: &Facts, b: &Facts) -> Option<Candidate> {
 }
 
 /// Compare two references directly.
-pub fn compare_pair(a: &Reference, b: &Reference) -> Option<Candidate> {
+#[cfg(test)]
+fn compare_pair(a: &Reference, b: &Reference) -> Option<Candidate> {
     compare(0, 1, &facts(a), &facts(b))
 }
 
