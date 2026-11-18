@@ -16,20 +16,36 @@ use crate::text::non_empty;
 pub(crate) const FORMAT: &str = "ris";
 
 /// A tag line: `TY  - JOUR`. Returns the tag and the value with trailing space removed.
+/// A tab counts as a space. A lower-case tag (`ty  - JOUR`, from hand-edited files) is
+/// accepted only in the strict two-letter, two-space form, so prose that wraps onto a
+/// continuation line is not mistaken for a tag; callers upper-case it.
 pub(crate) fn tag_line(line: &str) -> Option<(&str, &str)> {
     let b = line.as_bytes();
-    if b.is_empty() || !b[0].is_ascii_uppercase() {
+    if b.is_empty() || !b[0].is_ascii_alphabetic() {
         return None;
     }
+    let lower = b[0].is_ascii_lowercase();
     let n = b
         .iter()
         .take(5)
-        .take_while(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
+        .take_while(|c| {
+            if lower {
+                c.is_ascii_lowercase() || c.is_ascii_digit()
+            } else {
+                c.is_ascii_uppercase() || c.is_ascii_digit()
+            }
+        })
         .count();
     if !(2..=4).contains(&n) {
         return None;
     }
-    let spaces = b[n..].iter().take_while(|c| **c == b' ').count();
+    let spaces = b[n..]
+        .iter()
+        .take_while(|c| **c == b' ' || **c == b'\t')
+        .count();
+    if lower && (n != 2 || spaces != 2 || !line[n..].starts_with("  -")) {
+        return None;
+    }
     let dash = n + spaces;
     if b.get(dash) != Some(&b'-') {
         return None;
@@ -72,7 +88,7 @@ fn records(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<RawRecord> {
             continue;
         }
         if let Some((tag, value)) = tag_line(line) {
-            let tag = tag.to_string();
+            let tag = tag.to_ascii_uppercase();
             blank_pending = false;
             if tag == "TY" {
                 if let Some(rec) = current.take() {
@@ -814,6 +830,10 @@ mod tests {
         assert_eq!(tag_line("ABC-testing"), None);
         assert_eq!(tag_line("  with more text"), None);
         assert_eq!(tag_line("Ab  - x"), None);
+        assert_eq!(tag_line("ty  - JOUR"), Some(("ty", "JOUR")));
+        assert_eq!(tag_line("of - the"), None);
+        assert_eq!(tag_line("abc  - x"), None);
+        assert_eq!(tag_line("TI\t- Tabbed"), Some(("TI", "Tabbed")));
     }
 
     #[test]

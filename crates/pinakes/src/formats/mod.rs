@@ -141,7 +141,7 @@ impl Format {
         }
         if lines
             .iter()
-            .any(|l| matches!(ris::tag_line(l), Some(("TY", _))))
+            .any(|l| ris::tag_line(l).is_some_and(|(t, _)| t.eq_ignore_ascii_case("TY")))
         {
             return Some(Format::Ris);
         }
