@@ -366,10 +366,7 @@ fn siglum_ris() {
 fn siglum_keys() {
     let lib = fixture("siglum/library.bib");
     let mut refs = lib.references.clone();
-    for r in &mut refs {
-        r.citation_key = None;
-    }
-    pinakes::assign_keys(&mut refs, false);
+    pinakes::assign_keys(&mut refs, true);
     assert_eq!(refs[0].citation_key.as_deref(), Some("mueller2020moth"));
     assert_eq!(refs[1].citation_key.as_deref(), Some("northwind2023field"));
 }

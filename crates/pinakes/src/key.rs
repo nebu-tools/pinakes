@@ -3,7 +3,7 @@
 //! `okafor2019moths` for Okafor (2019) "The moths of the forest edge". Keys are ASCII letters
 //! and digits: names and titles are folded ("Ødegård" to "odegaard"), and scripts with no Latin
 //! folding contribute nothing. When two records would share a key, the second gets `a`, the
-//! third `b`, and so on, the way Better BibTeX does it. A key a record already has is kept. A
+//! third `b`, and so on, the way Better BibTeX does it. A key a record already has is kept, and so is a CSL `id` shaped like a key. A
 //! record with no author or editor takes the first word of its publisher instead.
 
 use crate::model::Reference;
@@ -119,32 +119,37 @@ pub(crate) fn keys_for_writing(refs: &[Reference]) -> Vec<String> {
     keys(refs, false)
 }
 
+/// The key a reference brings with it: its citation key, or else a CSL `id` that is shaped like
+/// one (`lind2020`, not `12` or a Zotero item URI), which is how pandoc and CSL-JSON libraries
+/// carry keys.
+fn own_key(r: &Reference) -> Option<&str> {
+    let key_like = |k: &&str| {
+        k.len() <= 64
+            && k.starts_with(|c: char| c.is_ascii_alphabetic())
+            && k.chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | ':' | '.'))
+    };
+    r.citation_key
+        .as_deref()
+        .map(str::trim)
+        .filter(|k| !k.is_empty())
+        .or_else(|| Some(r.id.trim()).filter(key_like))
+}
+
 fn keys(refs: &[Reference], replace: bool) -> Vec<String> {
     let mut taken: HashSet<String> = HashSet::new();
     let mut out: Vec<Option<String>> = vec![None; refs.len()];
     if !replace {
         for (i, r) in refs.iter().enumerate() {
-            if let Some(k) = r
-                .citation_key
-                .as_deref()
-                .map(str::trim)
-                .filter(|k| !k.is_empty())
-            {
-                // A repeated key is a collision too; the later record gets a suffix.
-                if taken.insert(k.to_string()) {
-                    out[i] = Some(k.to_string());
-                }
+            // A repeated key is a collision too; the later record gets a suffix.
+            if let Some(k) = own_key(r).filter(|k| taken.insert(k.to_string())) {
+                out[i] = Some(k.to_string());
             }
         }
     }
     for (i, r) in refs.iter().enumerate() {
         if out[i].is_none() {
-            let base = match r
-                .citation_key
-                .as_deref()
-                .map(str::trim)
-                .filter(|k| !k.is_empty() && !replace)
-            {
+            let base = match own_key(r).filter(|_| !replace) {
                 Some(k) => k.to_string(),
                 None => key_for(r),
             };
@@ -206,6 +211,12 @@ mod tests {
         assert_eq!(k, ["lind2020tide", "lind2020tidea", "mine"]);
         assign_keys(&mut refs, true);
         assert_eq!(refs[2].citation_key.as_deref(), Some("lind2020tideb"));
+        // A CSL id shaped like a key is the key; a number or a URI is not.
+        let mut csl = vec![r("Lind", 2020, "Tide"), r("Lind", 2020, "Tide"), r("Lind", 2020, "Tide")];
+        csl[0].id = "lind-tides".into();
+        csl[1].id = "12".into();
+        csl[2].id = "http://zotero.org/users/1/items/AB".into();
+        assert_eq!(keys_for_writing(&csl), ["lind-tides", "lind2020tide", "lind2020tidea"]);
         assert_eq!(suffix(25), "z");
         assert_eq!(suffix(26), "aa");
     }
