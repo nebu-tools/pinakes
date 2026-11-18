@@ -15,9 +15,12 @@
 //! Groups are joined from the candidates, never so that one group holds two different DOIs,
 //! PMIDs or PMCIDs.
 //!
-//! kittum compares every pair. Pinakes does too for small inputs; above [`EXHAUSTIVE_LIMIT`]
-//! records it compares only pairs that share an identifier, one of their rarest title words, or
-//! first author and year, which finds the same candidates in practice at a fraction of the cost.
+//! kittum compares every pair. Pinakes does too for small inputs. Above [`EXHAUSTIVE_LIMIT`]
+//! records it compares every pair that shares an identifier, and groups the rest into blocks:
+//! the whole title, each of the three rarest title words, the two rarest together, and first
+//! author with year. Within a block, in title order, each record is compared with the
+//! [`WINDOW`] records after it. Similar titles sort near each other, so this finds what
+//! comparing every pair finds, at a cost that grows with the input instead of its square.
 
 use crate::id::IdKind;
 use crate::model::Reference;
@@ -28,6 +31,10 @@ use unicode_normalization::UnicodeNormalization;
 
 /// Inputs up to this size are compared pair by pair.
 pub const EXHAUSTIVE_LIMIT: usize = 2000;
+
+/// Above [`EXHAUSTIVE_LIMIT`], records in a block are put in title order and each is compared
+/// with this many that follow it, so a block of up to `WINDOW + 1` records is compared in full.
+pub const WINDOW: usize = 16;
 
 /// How two records relate when they are a candidate.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -349,8 +356,6 @@ struct Patterns {
     phase: Regex,
     follow_up: [Regex; 2],
     study: Regex,
-    study_name: Regex,
-    named_number: Regex,
     number: Regex,
 }
 
@@ -367,8 +372,6 @@ fn patterns() -> &'static Patterns {
                 re(&format!(r"(?i)\b(?P<unit>year|month|week|day)s?\s+(?P<a>\d+){range}\b")),
             ],
             study: re(&format!(r"(?i)\b(?:study|trial)\s*(?:no\.?|number|#)?\s*(?P<a>\d+){range}\b")),
-            study_name: re(r"\b([A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?\d"),
-            named_number: re(r"\b(?P<w>[A-Za-z]+)[\s_-]?(?P<n>\d+)"),
             number: re(r"^(?P<base>iv|v|i{1,3}|\d+(?:\.\d+)?)(?P<suffix>[a-c]?)$"),
         }
     })
@@ -454,20 +457,63 @@ fn ends(m: &Captures) -> Vec<String> {
         .collect()
 }
 
+/// Runs of ASCII letters at a word boundary that a digit follows, directly or after one space,
+/// underscore or hyphen: the matches of `\b([A-Za-z]+)[\s_-]?(\d+)`, without a regex, since it
+/// runs on every title. With `all_digits` a match takes every digit; without, only the first,
+/// as `…[\s_-]?\d` does. Returns each run and its digits.
+fn letters_before_digits(s: &str, all_digits: bool) -> Vec<(&str, &str)> {
+    let b = s.as_bytes();
+    let word = |c: u8| c.is_ascii_alphanumeric() || c == b'_';
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        if !(b[i].is_ascii_alphabetic() && (i == 0 || !word(b[i - 1]))) {
+            i += 1;
+            continue;
+        }
+        let start = i;
+        let mut j = i;
+        while j < b.len() && b[j].is_ascii_alphabetic() {
+            j += 1;
+        }
+        let mut k = j;
+        if k < b.len()
+            && matches!(
+                b[k],
+                b' ' | b'\t' | b'\n' | 0x0b | 0x0c | b'\r' | b'_' | b'-'
+            )
+        {
+            k += 1;
+        }
+        if k < b.len() && b[k].is_ascii_digit() {
+            let mut e = k + 1;
+            while all_digits && e < b.len() && b[e].is_ascii_digit() {
+                e += 1;
+            }
+            out.push((&s[start..j], &s[k..e]));
+            i = e;
+        } else {
+            // No match starts inside the run: none of its letters is at a word boundary.
+            i = j;
+        }
+    }
+    out
+}
+
+/// Study names: a run of letters with at least two capitals, followed by a number (`ABC-12`).
 fn study_names(prepared: &str) -> HashSet<String> {
-    patterns()
-        .study_name
-        .captures_iter(prepared)
-        .map(|c| c[1].to_lowercase())
+    letters_before_digits(prepared, false)
+        .into_iter()
+        .filter(|(w, _)| w.bytes().filter(u8::is_ascii_uppercase).count() >= 2)
+        .map(|(w, _)| w.to_lowercase())
         .collect()
 }
 
 fn words_before_numbers(prepared: &str) -> HashSet<String> {
-    patterns()
-        .named_number
-        .captures_iter(prepared)
-        .map(|m| m["w"].to_lowercase())
-        .filter(|w| w.chars().count() > 1 && !NOT_STUDY_NAMES.contains(&w.as_str()))
+    letters_before_digits(prepared, true)
+        .into_iter()
+        .map(|(w, _)| w.to_lowercase())
+        .filter(|w| w.len() > 1 && !NOT_STUDY_NAMES.contains(&w.as_str()))
         .collect()
 }
 
@@ -479,10 +525,10 @@ struct Tokens {
 fn tokens(prepared: &str, names: &HashSet<String>) -> Tokens {
     let p = patterns();
     let mut t = Tokens::default();
-    for m in p.named_number.captures_iter(prepared) {
-        let w = m["w"].to_lowercase();
+    for (w, n) in letters_before_digits(prepared, true) {
+        let w = w.to_lowercase();
         if names.contains(&w) {
-            t.kinds[0].insert(format!("{w} {}", number(&m["n"])));
+            t.kinds[0].insert(format!("{w} {}", number(n)));
         }
     }
     for m in p.phase.captures_iter(prepared) {
@@ -631,16 +677,22 @@ fn pairs_to_compare(facts: &[Facts]) -> Vec<(usize, usize)> {
             .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
             .collect();
     }
-    let mut seen: HashSet<(u32, u32)> = HashSet::new();
-    let add_block = |members: &[usize], seen: &mut HashSet<(u32, u32)>| {
-        for (x, &i) in members.iter().enumerate() {
-            for &j in &members[x + 1..] {
-                let (a, b) = if i < j { (i, j) } else { (j, i) };
-                seen.insert((a as u32, b as u32));
-            }
-        }
+    // Every record's place in title order, so a block sorts by title cheaply.
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&i, &j| facts[i].sorted.cmp(&facts[j].sorted));
+    let mut rank = vec![0u32; n];
+    for (r, &i) in order.iter().enumerate() {
+        rank[i] = r as u32;
+    }
+    let mut out: Vec<(u32, u32)> = Vec::new();
+    let mut pair = |i: usize, j: usize| {
+        out.push(if i < j {
+            (i as u32, j as u32)
+        } else {
+            (j as u32, i as u32)
+        })
     };
-    // Identifiers.
+    // Records that share an identifier: every pair.
     let mut by_id: HashMap<(u8, &str), Vec<usize>> = HashMap::new();
     for (i, f) in facts.iter().enumerate() {
         for (k, v) in [(0u8, &f.doi), (1, &f.pmid), (2, &f.pmcid)] {
@@ -650,42 +702,64 @@ fn pairs_to_compare(facts: &[Facts]) -> Vec<(usize, usize)> {
         }
     }
     for members in by_id.values() {
-        add_block(members, &mut seen);
+        for (x, &i) in members.iter().enumerate() {
+            for &j in &members[x + 1..] {
+                pair(i, j);
+            }
+        }
     }
-    // The three rarest title words.
+    // Other blocks: in title order, each record and the next WINDOW.
+    let mut blocks: HashMap<Key, Vec<usize>> = HashMap::new();
     let mut df: HashMap<&str, usize> = HashMap::new();
     for f in facts {
         for w in &f.words {
             *df.entry(w.as_str()).or_default() += 1;
         }
     }
-    let mut by_word: HashMap<&str, Vec<usize>> = HashMap::new();
     for (i, f) in facts.iter().enumerate() {
+        if f.sorted.is_empty() {
+            continue;
+        }
+        // The whole title.
+        blocks.entry(Key::Title(&f.sorted)).or_default().push(i);
+        // The three rarest title words, and the two rarest together.
         let mut ws: Vec<&str> = f.words.iter().map(String::as_str).collect();
         ws.sort_by_key(|w| (df[w], std::cmp::Reverse(w.len()), *w));
+        if let [a, b, ..] = ws[..] {
+            blocks
+                .entry(Key::Two(a.min(b), a.max(b)))
+                .or_default()
+                .push(i);
+        }
         for w in ws.into_iter().take(3) {
-            by_word.entry(w).or_default().push(i);
+            blocks.entry(Key::Word(w)).or_default().push(i);
         }
-    }
-    for members in by_word.values() {
-        add_block(members, &mut seen);
-    }
-    // First author and year.
-    let mut by_author: HashMap<(&str, i32), Vec<usize>> = HashMap::new();
-    for (i, f) in facts.iter().enumerate() {
+        // First author and year.
         if let (Some(a), Some(y)) = (&f.author, f.year) {
-            by_author.entry((a.as_str(), y)).or_default().push(i);
+            blocks.entry(Key::Author(a, y)).or_default().push(i);
         }
     }
-    for members in by_author.values() {
-        add_block(members, &mut seen);
+    for members in blocks.values_mut() {
+        members.sort_unstable_by_key(|&i| rank[i]);
+        for (x, &i) in members.iter().enumerate() {
+            for &j in members.iter().skip(x + 1).take(WINDOW) {
+                pair(i, j);
+            }
+        }
     }
-    let mut out: Vec<(usize, usize)> = seen
-        .into_iter()
-        .map(|(a, b)| (a as usize, b as usize))
-        .collect();
     out.sort_unstable();
-    out
+    out.dedup();
+    out.into_iter()
+        .map(|(a, b)| (a as usize, b as usize))
+        .collect()
+}
+
+#[derive(PartialEq, Eq, Hash)]
+enum Key<'a> {
+    Title(&'a [char]),
+    Word(&'a str),
+    Two(&'a str, &'a str),
+    Author(&'a str, i32),
 }
 
 struct Groups {
@@ -731,7 +805,8 @@ pub fn find_duplicates(refs: &[Reference]) -> Duplicates {
             .collect(),
     };
     let mut pairs = Vec::new();
-    for (i, j) in pairs_to_compare(&facts) {
+    let todo = pairs_to_compare(&facts);
+    for (i, j) in todo {
         if let Some(c) = compare(i, j, &facts[i], &facts[j]) {
             if groups.union(i, j) {
                 pairs.push(c);
@@ -788,6 +863,22 @@ mod tests {
         let long_a: String = "abcdefghij".repeat(20);
         let long_b: String = format!("x{}", "abcdefghij".repeat(20));
         assert!((ratio(&long_a, &long_b) - 200.0 * 200.0 / 401.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn scanners_match_the_patterns_they_replace() {
+        let named = Regex::new(r"\b(?P<w>[A-Za-z]+)[\s_-]?(?P<n>\d+)").unwrap();
+        let study = Regex::new(r"\b([A-Za-z]*[A-Z][A-Za-z]*[A-Z][A-Za-z]*)[\s_-]?\d").unwrap();
+        proptest::proptest!(|(s in "[abAB0-9 _\\-é.]{0,24}")| {
+            let want: Vec<(&str, &str)> = named
+                .captures_iter(&s)
+                .map(|m| (m.name("w").unwrap().as_str(), m.name("n").unwrap().as_str()))
+                .collect();
+            proptest::prop_assert_eq!(letters_before_digits(&s, true), want);
+            let want: HashSet<String> =
+                study.captures_iter(&s).map(|c| c[1].to_lowercase()).collect();
+            proptest::prop_assert_eq!(study_names(&s), want);
+        });
     }
 
     #[test]

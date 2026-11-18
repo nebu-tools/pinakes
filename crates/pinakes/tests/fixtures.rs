@@ -1,4 +1,4 @@
-//! Every file under `fixtures/` is read, and what Pinakes makes of it is compared with
+//! Every file under `fixtures/` (except the gitignored `generated/`) is read, and what Pinakes makes of it is compared with
 //! `fixtures/expected/<path>.json`: the format it detected, every diagnostic, and the records as
 //! CSL-JSON. Run with `PINAKES_BLESS=1` to rewrite the expected files after a deliberate change,
 //! then read the diff.
@@ -21,7 +21,7 @@ fn inputs(dir: &Path, out: &mut Vec<PathBuf>) {
     for p in entries {
         let name = p.file_name().unwrap().to_string_lossy().to_string();
         if p.is_dir() {
-            if name != "expected" {
+            if name != "expected" && name != "generated" {
                 inputs(&p, out);
             }
         } else if !name.ends_with(".md") {
