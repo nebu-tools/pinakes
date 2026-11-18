@@ -68,7 +68,7 @@ fn check_reports_diagnostics_with_lines_and_fails_on_errors() {
         "{}",
         text(&out.stderr)
     );
-    assert!(text(&out.stdout).contains("<stdin>: 2 records as ris; 0 errors, 1 warnings"));
+    assert!(text(&out.stdout).contains("<stdin>: 2 records as ris; 0 errors, 1 warning"));
 
     let out = pinakes(&["check", "--from", "medline"], RIS);
     assert_eq!(out.status.code(), Some(1));

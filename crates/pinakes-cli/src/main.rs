@@ -142,12 +142,12 @@ fn run(cli: Cli) -> Result<bool, String> {
                         .count()
                 };
                 println!(
-                    "{}: {} records as {}; {} errors, {} warnings",
+                    "{}: {} as {}; {}, {}",
                     s.name,
-                    s.lib.references.len(),
+                    plural(s.lib.references.len(), "record"),
                     s.lib.format.map_or("an unknown format", Format::name),
-                    count(Severity::Error),
-                    count(Severity::Warning),
+                    plural(count(Severity::Error), "error"),
+                    plural(count(Severity::Warning), "warning"),
                 );
             }
             Ok(clean)
@@ -204,10 +204,10 @@ fn run(cli: Cli) -> Result<bool, String> {
                 println!("{kind}: {}", members.join(" "));
             }
             eprintln!(
-                "{} records, {} candidate pairs, {} groups",
-                refs.len(),
-                dups.pairs.len(),
-                dups.groups.len()
+                "{}, {}, {}",
+                plural(refs.len(), "record"),
+                plural(dups.pairs.len(), "candidate pair"),
+                plural(dups.groups.len(), "group")
             );
             Ok(clean)
         }
@@ -251,6 +251,14 @@ fn read_one(path: &PathBuf, from: Option<Format>) -> Result<Source, String> {
         }
     }
     Ok(Source { name, lib })
+}
+
+fn plural(n: usize, word: &str) -> String {
+    if n == 1 {
+        format!("1 {word}")
+    } else {
+        format!("{n} {word}s")
+    }
 }
 
 /// Print diagnostics: errors always, the rest when `all`. True when there were no errors.
