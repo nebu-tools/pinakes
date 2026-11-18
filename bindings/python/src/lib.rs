@@ -42,6 +42,7 @@ fn read_json(py: Python<'_>, data: &[u8], format_name: Option<&str>) -> PyResult
 #[pyfunction]
 fn write_json(references: &str, format_name: &str) -> PyResult<String> {
     pinakes::write(&items(references)?, format(format_name)?)
+        .map(|w| json(&w))
         .map_err(|e| PyValueError::new_err(e.to_string()))
 }
 

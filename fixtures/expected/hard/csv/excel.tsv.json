@@ -6,6 +6,7 @@
       "code": "id.pmcid-as-pmid",
       "line": 3,
       "record": 1,
+      "field": null,
       "message": "PMC123 is a PMCID, not a PMID; moved it to the PMCID field"
     }
   ],

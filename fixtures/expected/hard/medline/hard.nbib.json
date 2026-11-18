@@ -6,6 +6,7 @@
       "code": "medline.bad-line",
       "line": 35,
       "record": null,
+      "field": null,
       "message": "A line is neither a field nor an indented continuation; read it as a continuation"
     }
   ],

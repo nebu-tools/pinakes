@@ -51,19 +51,32 @@ test("bad input gives diagnostics with lines, not exceptions", () => {
 
 test("write in every writable format, and refuse the others", () => {
   const refs = read(RIS).references;
-  assert.match(write(refs, "biblatex"), /^@article\{adeyemi2019moths,/);
-  assert.match(write(refs, "bibtex"), /doi += \{10\.5555\/x\}/);
-  assert.match(write(refs, "ris"), /^TY {2}- JOUR\n/);
-  assert.match(write(refs, "hayagriva"), /^adeyemi2019moths:\n/);
-  assert.deepEqual(JSON.parse(write(refs, "csl-json")), refs);
+  const out = write(refs, "biblatex");
+  assert.match(out.text, /^@article\{adeyemi2019moths,/);
+  assert.deepEqual(out.diagnostics, []);
+  assert.match(write(refs, "bibtex").text, /doi += \{10\.5555\/x\}/);
+  assert.match(write(refs, "ris").text, /^TY {2}- JOUR\n/);
+  assert.match(write(refs, "hayagriva").text, /^adeyemi2019moths:\n/);
+  assert.deepEqual(JSON.parse(write(refs, "csl-json").text), refs);
   assert.throws(() => write(refs, "medline"), /does not write/);
   assert.throws(() => write(refs, "nonsense"), /unknown format/);
   assert.throws(() => write("{not json", "ris"), /not valid CSL-JSON/);
 });
 
+test("write reports what the format cannot hold", () => {
+  const item = { id: "x", type: "book", title: "Tides", "x-shelf": "B4", URL: "https://a.org/a}b" };
+  const ris = write(item, "ris").diagnostics.filter((d) => d.field === "x-shelf");
+  assert.equal(ris.length, 1);
+  assert.equal(ris[0].code, "ris.left-out");
+  assert.equal(ris[0].record, 0);
+  const bib = write(item, "biblatex");
+  assert.equal(bib.diagnostics.find((d) => d.field === "URL").code, "bibtex.verbatim-encoded");
+  assert.match(bib.text, /url += \{https:\/\/a\.org\/a%7Db\}/);
+});
+
 test("unknown CSL-JSON fields survive a round trip", () => {
   const item = { id: "x", type: "book", title: "Tides", "x-shelf": "B4", custom: { "my-flag": true } };
-  const back = read(write([item], "csl-json")).references[0];
+  const back = read(write([item], "csl-json").text).references[0];
   assert.equal(back["x-shelf"], "B4");
   assert.equal(back.custom["my-flag"], true);
 });
@@ -77,10 +90,10 @@ test("name and date members, and the others name, survive a round trip", () => {
     issued: { "date-parts": [[2020]], season: 2 },
   };
   for (const format of ["csl-json", "bibtex"]) {
-    const back = read(write([item], format)).references[0];
+    const back = read(write([item], format).text).references[0];
     assert.deepEqual(back.author.at(-1), { literal: "others" }, format);
   }
-  const back = read(write([item], "csl-json")).references[0];
+  const back = read(write([item], "csl-json").text).references[0];
   assert.equal(back.author[0]["static-ordering"], true);
   assert.equal(back.issued.season, 2);
 });

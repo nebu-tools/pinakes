@@ -6,6 +6,7 @@
       "code": "wos.no-ut",
       "line": 23,
       "record": 1,
+      "field": null,
       "message": "A record has no UT accession number"
     },
     {
@@ -13,6 +14,7 @@
       "code": "wos.no-ut",
       "line": 32,
       "record": 2,
+      "field": null,
       "message": "A record has no UT accession number"
     }
   ],

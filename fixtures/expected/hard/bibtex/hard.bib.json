@@ -6,6 +6,7 @@
       "code": "bibtex.preamble",
       "line": 1,
       "record": null,
+      "field": null,
       "message": "Skipped an @preamble"
     },
     {
@@ -13,6 +14,7 @@
       "code": "bibtex.unclosed",
       "line": 76,
       "record": null,
+      "field": null,
       "message": "In field title of entry \"broken\", a brace is not closed; kept the fields before it"
     },
     {
@@ -20,6 +22,7 @@
       "code": "record.no-title",
       "line": 74,
       "record": 7,
+      "field": null,
       "message": "Record broken has no title"
     }
   ],

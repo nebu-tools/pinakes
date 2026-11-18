@@ -70,19 +70,19 @@ pub fn to_value(r: &Reference) -> Value {
     if let Some(d) = &r.accessed {
         m.insert("accessed".into(), date_value(d));
     }
-    let mut custom = match r.extra.get("custom") {
+    let kept_custom = match r.extra.get("custom") {
         Some(Value::Object(c)) => c.clone(),
         _ => Map::new(),
     };
-    if let Some(a) = &r.arxiv {
-        custom.insert("arxiv".into(), Value::String(a.clone()));
-    }
-    if let Some(a) = &r.accession {
-        custom.insert("accession-number".into(), Value::String(a.clone()));
-    }
-    if let Some(a) = &r.database {
-        custom.insert("database".into(), Value::String(a.clone()));
-    }
+    let mut custom = Map::new();
+    let mut put = |k: &str, v: &Option<String>| {
+        if let Some(v) = v {
+            custom.insert(k.into(), Value::String(v.clone()));
+        }
+    };
+    put("arxiv", &r.arxiv);
+    put("accession-number", &r.accession);
+    put("database", &r.database);
     if !r.publication_types.is_empty() {
         custom.insert("publication-type".into(), json!(r.publication_types));
     }
@@ -97,6 +97,22 @@ pub fn to_value(r: &Reference) -> Value {
             ),
         );
     }
+    if let Some(raw) = kept_custom.get("publication-type") {
+        if publication_types_of(raw) == r.publication_types {
+            custom.insert("publication-type".into(), raw.clone());
+        }
+    }
+    if let Some(raw) = kept_custom.get("source-fields") {
+        if source_fields_of(raw) == r.source_fields {
+            custom.insert("source-fields".into(), raw.clone());
+        }
+    }
+    merge_raw(
+        &mut custom,
+        &kept_custom,
+        CUSTOM_TYPED,
+        &["publication-type", "source-fields"],
+    );
     if let Some(raw) = r.extra.get("keyword") {
         if keyword_list(raw) == r.keywords {
             m.insert("keyword".into(), raw.clone());
@@ -394,6 +410,186 @@ pub(crate) fn parse_date_value(v: &Value) -> Option<Date> {
     }
 }
 
+/// `custom` members read as text into a typed slot.
+const CUSTOM_TYPED: &[&str] = &["arxiv", "accession-number", "database"];
+
+/// Publication types as the reader leaves them.
+fn publication_types_of(v: &Value) -> Vec<String> {
+    match v {
+        Value::Array(a) => a.iter().filter_map(string_of).collect(),
+        other => string_of(other).into_iter().collect(),
+    }
+}
+
+/// Source fields as the reader leaves them: each object element, with its three members as
+/// text. A string member is kept exactly, white space included, as the source had it.
+fn source_fields_of(v: &Value) -> Vec<SourceField> {
+    let Value::Array(a) = v else {
+        return Vec::new();
+    };
+    a.iter()
+        .filter(|f| f.is_object())
+        .map(|f| {
+            let get = |key: &str| match f.get(key) {
+                Some(Value::String(s)) => s.clone(),
+                other => other.and_then(string_of).unwrap_or_default(),
+            };
+            SourceField {
+                format: get("format"),
+                name: get("name"),
+                value: get("value"),
+            }
+        })
+        .collect()
+}
+
+/// Whether `source-fields` is exactly what the writer makes of the list it reads as.
+fn plain_source_fields(v: &Value) -> bool {
+    let Value::Array(a) = v else {
+        return false;
+    };
+    a.iter().all(|f| {
+        f.as_object().is_some_and(|o| {
+            o.len() == 3
+                && ["format", "name", "value"]
+                    .iter()
+                    .all(|k| o.get(*k).is_some_and(Value::is_string))
+        })
+    })
+}
+
+/// Whether the members of `v` are only text, numbers and lists of them: forms the typed slot
+/// reads in full.
+fn only_text(v: &Value) -> bool {
+    match v {
+        Value::String(_) | Value::Number(_) => true,
+        Value::Array(a) => a
+            .iter()
+            .all(|x| matches!(x, Value::String(_) | Value::Number(_))),
+        _ => false,
+    }
+}
+
+/// Whether `date-parts` says no more than `start` and `end`: the same numbers, some perhaps
+/// written as text.
+fn parts_form_only(raw: &Value, start: Option<Ymd>, end: Option<Ymd>) -> bool {
+    let Some(start) = start else {
+        return false;
+    };
+    let mut want = vec![ymd_value(&start)];
+    if let Some(end) = &end {
+        want.push(ymd_value(end));
+    }
+    let got: Option<Vec<Value>> = raw.as_array().and_then(|ps| {
+        ps.iter()
+            .map(|p| {
+                p.as_array()
+                    .and_then(|a| a.iter().map(|x| part(x).map(|n| json!(n))).collect())
+                    .map(Value::Array)
+            })
+            .collect()
+    });
+    got == Some(want)
+}
+
+/// The record without the members the reader kept only for their form (`12` for "12", a
+/// name as a string). What is left are the values: a member kept because it holds more than
+/// its typed slot (a name list with a number in it, a source field with a member of its own)
+/// stays.
+pub(crate) fn without_forms(r: &Reference) -> Reference {
+    let mut out = r.clone();
+    let plain = to_value(&Reference {
+        extra: Map::new(),
+        ..r.clone()
+    });
+    let same_text = |raw: &Value, typed: Option<&str>| {
+        matches!(raw, Value::String(_) | Value::Number(_))
+            && typed.is_some()
+            && string_of(raw).as_deref() == typed
+    };
+    out.extra.retain(|k, raw| match (k.as_str(), &*raw) {
+        ("id", _) => false,
+        ("keyword", raw) => !(only_text(raw) && keyword_list(raw) == r.keywords),
+        ("author" | "editor", raw) => {
+            let names = if k == "author" { &r.author } else { &r.editor };
+            let parts_are_names = match raw {
+                Value::Array(a) => a.iter().all(|n| n.is_string() || n.is_object()),
+                other => other.is_string() || other.is_object(),
+            };
+            !(parts_are_names && &names_of(raw) == names)
+        }
+        ("custom", _) => true,
+        (k, raw) if TYPED_TOP.contains(&k) => {
+            let canonical = match k {
+                "citation_key" => "citation-key",
+                "shortTitle" => "title-short",
+                "journalAbbreviation" => "container-title-short",
+                "url" => "URL",
+                "doi" => "DOI",
+                "pmid" => "PMID",
+                "pmcid" => "PMCID",
+                "isbn" => "ISBN",
+                "issn" => "ISSN",
+                k => k,
+            };
+            !same_text(raw, plain.get(canonical).and_then(Value::as_str))
+        }
+        _ => true,
+    });
+    if let Some(Value::Object(c)) = out.extra.get_mut("custom") {
+        c.retain(|k, raw| match k.as_str() {
+            "arxiv" => !same_text(raw, r.arxiv.as_deref()),
+            "accession-number" => !same_text(raw, r.accession.as_deref()),
+            "database" => !same_text(raw, r.database.as_deref()),
+            "publication-type" => {
+                !(only_text(raw) && publication_types_of(raw) == r.publication_types)
+            }
+            "source-fields" => {
+                let text_only = matches!(raw, Value::Array(a) if a.iter().all(|f| {
+                    f.as_object().is_some_and(|o| {
+                        o.iter().all(|(k, v)| {
+                            ["format", "name", "value"].contains(&k.as_str())
+                                && matches!(v, Value::String(_) | Value::Number(_))
+                        })
+                    })
+                }));
+                !(text_only && source_fields_of(raw) == r.source_fields)
+            }
+            _ => true,
+        });
+        if c.is_empty() {
+            out.extra.remove("custom");
+        }
+    }
+    for n in out.author.iter_mut().chain(out.editor.iter_mut()) {
+        let parts = [
+            ("family", n.family.clone()),
+            ("given", n.given.clone()),
+            ("non-dropping-particle", n.particle.clone()),
+            ("dropping-particle", n.dropping_particle.clone()),
+            ("suffix", n.suffix.clone()),
+            ("literal", n.literal.clone()),
+        ];
+        n.extra.retain(|k, raw| {
+            !parts
+                .iter()
+                .any(|(p, v)| p == k && same_text(raw, v.as_deref()))
+        });
+    }
+    for d in [&mut out.issued, &mut out.accessed].into_iter().flatten() {
+        let (start, end, circa) = (d.start, d.end, d.circa);
+        let (literal, raw_text) = (d.literal.clone(), d.raw.clone());
+        d.extra.retain(|k, raw| match k.as_str() {
+            "date-parts" => !parts_form_only(raw, start, end),
+            "circa" => circa_of(Some(raw)) != circa,
+            "literal" => !same_text(raw, literal.as_deref()),
+            "raw" => !same_text(raw, raw_text.as_deref()),
+            _ => true,
+        });
+    }
+    out
+}
+
 /// The members of a CSL name Pinakes types.
 const NAME_PARTS: &[&str] = &[
     "family",
@@ -607,30 +803,27 @@ pub fn from_value(
                     let mut rest = Map::new();
                     for (ck, cv) in c {
                         match ck.as_str() {
-                            "arxiv" => r.arxiv = string_of(cv),
-                            "accession-number" => r.accession = string_of(cv),
-                            "database" => r.database = string_of(cv),
+                            "arxiv" | "accession-number" | "database" => {
+                                keep_raw(&mut rest, ck, cv);
+                                let v = string_of(cv);
+                                match ck.as_str() {
+                                    "arxiv" => r.arxiv = v,
+                                    "accession-number" => r.accession = v,
+                                    _ => r.database = v,
+                                }
+                            }
                             "publication-type" => {
-                                r.publication_types = match cv {
-                                    Value::Array(a) => a.iter().filter_map(string_of).collect(),
-                                    other => string_of(other).into_iter().collect(),
+                                r.publication_types = publication_types_of(cv);
+                                if *cv != json!(r.publication_types) {
+                                    rest.insert(ck.clone(), cv.clone());
                                 }
                             }
                             "source-fields" => {
-                                if let Value::Array(a) = cv {
-                                    for f in a {
-                                        let get = |key: &str| {
-                                            f.get(key)
-                                                .and_then(Value::as_str)
-                                                .unwrap_or_default()
-                                                .to_string()
-                                        };
-                                        r.source_fields.push(SourceField {
-                                            format: get("format"),
-                                            name: get("name"),
-                                            value: get("value"),
-                                        });
-                                    }
+                                r.source_fields = source_fields_of(cv);
+                                if !plain_source_fields(cv) {
+                                    // Something in it is not a source field as Pinakes writes
+                                    // one: keep the member as it came.
+                                    rest.insert(ck.clone(), cv.clone());
                                 }
                             }
                             _ => {
@@ -661,9 +854,155 @@ pub fn from_value(
     Some(r)
 }
 
+/// A key that appeared twice in one JSON object.
+struct Repeat {
+    /// The item it is in, counted from 0, if it is in one.
+    item: Option<usize>,
+    /// Whether it is in the document object, which is an item only when it is not a wrapper.
+    top: bool,
+    /// The item's member it is in, or the key itself at the item's top.
+    member: String,
+    key: String,
+}
+
+/// Where the parser is: what the value being read is, in CSL-JSON terms.
+#[derive(Clone)]
+enum Place {
+    /// The whole document: a list of items, an `{"items": [...]}` wrapper or one item.
+    Document,
+    /// The `items` list of a wrapper.
+    Items,
+    /// Item `n`.
+    Item(usize),
+    /// Under member `m` of the document object, which is item 0 unless it is a wrapper.
+    Top(String),
+    /// Inside item `n` (if any), under its member `m`.
+    Inside(Option<usize>, String),
+}
+
+/// A JSON value read the way `serde_json` reads it, last value winning for a repeated key,
+/// with each repeated key noted.
+struct Seed<'a> {
+    place: Place,
+    repeats: &'a std::cell::RefCell<Vec<Repeat>>,
+}
+
+impl<'de> serde::de::DeserializeSeed<'de> for Seed<'_> {
+    type Value = Value;
+
+    fn deserialize<D: serde::Deserializer<'de>>(self, d: D) -> Result<Value, D::Error> {
+        d.deserialize_any(self)
+    }
+}
+
+impl<'de> serde::de::Visitor<'de> for Seed<'_> {
+    type Value = Value;
+
+    fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        f.write_str("a JSON value")
+    }
+
+    fn visit_bool<E>(self, v: bool) -> Result<Value, E> {
+        Ok(Value::Bool(v))
+    }
+
+    fn visit_i64<E>(self, v: i64) -> Result<Value, E> {
+        Ok(Value::from(v))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Value, E> {
+        Ok(Value::from(v))
+    }
+
+    fn visit_f64<E>(self, v: f64) -> Result<Value, E> {
+        Ok(serde_json::Number::from_f64(v).map_or(Value::Null, Value::Number))
+    }
+
+    fn visit_str<E>(self, v: &str) -> Result<Value, E> {
+        Ok(Value::String(v.to_string()))
+    }
+
+    fn visit_string<E>(self, v: String) -> Result<Value, E> {
+        Ok(Value::String(v))
+    }
+
+    fn visit_unit<E>(self) -> Result<Value, E> {
+        Ok(Value::Null)
+    }
+
+    fn visit_none<E>(self) -> Result<Value, E> {
+        Ok(Value::Null)
+    }
+
+    fn visit_seq<A: serde::de::SeqAccess<'de>>(self, mut seq: A) -> Result<Value, A::Error> {
+        let mut out = Vec::new();
+        loop {
+            let place = match &self.place {
+                Place::Document | Place::Items => Place::Item(out.len()),
+                Place::Item(n) => Place::Inside(Some(*n), String::new()),
+                Place::Top(m) => Place::Top(m.clone()),
+                inside => inside.clone(),
+            };
+            let seed = Seed {
+                place,
+                repeats: self.repeats,
+            };
+            match seq.next_element_seed(seed)? {
+                Some(v) => out.push(v),
+                None => return Ok(Value::Array(out)),
+            }
+        }
+    }
+
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Value, A::Error> {
+        let mut out = Map::new();
+        while let Some(key) = map.next_key::<String>()? {
+            let place = match &self.place {
+                Place::Document if key == "items" => Place::Items,
+                Place::Document => Place::Top(key.clone()),
+                Place::Items => Place::Inside(None, key.clone()),
+                Place::Item(n) => Place::Inside(Some(*n), key.clone()),
+                Place::Inside(n, m) if m.is_empty() => Place::Inside(*n, key.clone()),
+                Place::Top(m) => Place::Top(m.clone()),
+                inside => inside.clone(),
+            };
+            if out.contains_key(&key) {
+                let (item, top, member) = match &place {
+                    Place::Inside(n, m) => (*n, false, m.clone()),
+                    Place::Top(m) => (Some(0), true, m.clone()),
+                    _ => (None, matches!(self.place, Place::Document), key.clone()),
+                };
+                self.repeats.borrow_mut().push(Repeat {
+                    item,
+                    top,
+                    member,
+                    key: key.clone(),
+                });
+            }
+            let v = map.next_value_seed(Seed {
+                place,
+                repeats: self.repeats,
+            })?;
+            out.insert(key, v);
+        }
+        Ok(Value::Object(out))
+    }
+}
+
 /// Read a CSL-JSON document: an array of items, `{"items": [...]}`, or one item.
 pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
-    let value: Value = match serde_json::from_str(text) {
+    let repeats = std::cell::RefCell::new(Vec::new());
+    let parsed = {
+        use serde::de::DeserializeSeed;
+        let mut de = serde_json::Deserializer::from_str(text);
+        Seed {
+            place: Place::Document,
+            repeats: &repeats,
+        }
+        .deserialize(&mut de)
+        .and_then(|v| de.end().map(|()| v))
+    };
+    let value: Value = match parsed {
         Ok(v) => v,
         Err(e) => {
             diags.push(
@@ -689,6 +1028,36 @@ pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
     let lines = item_lines(text);
     let single =
         matches!(value, Value::Object(_)) && !matches!(value.get("items"), Some(Value::Array(_)));
+    let wrapper =
+        matches!(&value, Value::Object(o) if matches!(o.get("items"), Some(Value::Array(_))));
+    for rep in repeats.into_inner() {
+        // In a wrapper, a key repeated beside `items` belongs to no item.
+        let item = rep.item.filter(|_| !(wrapper && rep.top));
+        let mut d = Diagnostic::warning(
+            "csl.duplicate-key",
+            match item {
+                Some(n) if rep.member == rep.key => format!(
+                    "Item {}: {:?} is given more than once; read the last value",
+                    n + 1,
+                    rep.key
+                ),
+                Some(n) => format!(
+                    "Item {}: {:?} inside {:?} is given more than once; read the last value",
+                    n + 1,
+                    rep.key,
+                    rep.member
+                ),
+                None => format!("{:?} is given more than once; read the last value", rep.key),
+            },
+        );
+        if let Some(n) = item {
+            d = d.record(n).field(rep.member.clone());
+            if let Some(l) = lines.get(n).copied().or(single.then_some(1)) {
+                d = d.at(l);
+            }
+        }
+        diags.push(d);
+    }
     items
         .into_iter()
         .enumerate()
@@ -699,11 +1068,15 @@ pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
         .collect()
 }
 
-/// Write CSL-JSON: a pretty-printed array.
+/// Write CSL-JSON: a pretty-printed array. A byte-order mark can only be inside a string, and
+/// is written as the escape `\ufeff`, because reading removes the character itself.
 pub fn write(refs: &[Reference]) -> String {
     let items: Vec<Value> = refs.iter().map(to_value).collect();
     let mut out =
         serde_json::to_string_pretty(&Value::Array(items)).unwrap_or_else(|_| "[]".into());
+    if out.contains('\u{feff}') {
+        out = out.replace('\u{feff}', "\\ufeff");
+    }
     out.push('\n');
     out
 }

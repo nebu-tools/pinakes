@@ -1,6 +1,7 @@
 //! Diagnostics: what a reader noticed and what it did about it.
 //!
-//! Readers never stop at the first problem and never drop input without a diagnostic. An
+//! Readers never stop at the first problem and never drop input without a diagnostic. Writers
+//! give the same diagnostics for every value they could not write as it was. An
 //! `Error` means part of the input could not be read as the format says, and the message says
 //! what Pinakes kept instead. A `Warning` means the input was read but something in it is
 //! doubtful (a DOI that does not look like one, a record with no title). `Info` notes a repair
@@ -25,6 +26,9 @@ pub struct Diagnostic {
     pub line: Option<usize>,
     /// 0-based index of the record in the result, when the problem belongs to one.
     pub record: Option<usize>,
+    /// The field the problem is in: the source field for a reader (`TI`, `title`), the
+    /// CSL-JSON variable for a writer (`title`, `URL`, `author`).
+    pub field: Option<String>,
 }
 
 impl Severity {
@@ -45,6 +49,7 @@ impl Diagnostic {
             message: message.into(),
             line: None,
             record: None,
+            field: None,
         }
     }
 
@@ -67,6 +72,11 @@ impl Diagnostic {
 
     pub fn record(mut self, record: usize) -> Diagnostic {
         self.record = Some(record);
+        self
+    }
+
+    pub fn field(mut self, field: impl Into<String>) -> Diagnostic {
+        self.field = Some(field.into());
         self
     }
 }

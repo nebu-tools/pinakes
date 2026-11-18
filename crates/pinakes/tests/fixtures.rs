@@ -44,7 +44,7 @@ fn format_for(rel: &str) -> Option<Format> {
 pub fn summary(rel: &str, bytes: &[u8]) -> Value {
     let lib = read(bytes, format_for(rel));
     let refs: Value =
-        serde_json::from_str(&write(&lib.references, Format::CslJson).unwrap()).unwrap();
+        serde_json::from_str(&write(&lib.references, Format::CslJson).unwrap().text).unwrap();
     json!({
         "format": lib.format.map(|f| f.name()),
         "diagnostics": lib.diagnostics.iter().map(|d| json!({
@@ -52,6 +52,7 @@ pub fn summary(rel: &str, bytes: &[u8]) -> Value {
             "code": d.code,
             "line": d.line,
             "record": d.record,
+            "field": d.field,
             "message": d.message,
         })).collect::<Vec<_>>(),
         "references": refs,

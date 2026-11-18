@@ -4,7 +4,8 @@
 //!
 //! - [`read`] turns the bytes of a file in any [`Format`] it reads into [`Reference`]s and
 //!   [`Diagnostic`]s. It never panics and never drops input without a diagnostic.
-//! - [`write`] turns references into text in a format it writes.
+//! - [`write`] turns references into text in a format it writes, with a [`Diagnostic`] for
+//!   each value the format could not hold as it was.
 //! - [`normalise`] puts a reference's identifiers and page ranges in normal form. [`read`]
 //!   has already done this for what it returns.
 //! - [`assign_keys`] gives references citation keys.
@@ -13,10 +14,12 @@
 //! ```
 //! let lib = pinakes::read(b"TY  - JOUR\nTI  - Moths\nAU  - Adeyemi, Ada\nPY  - 2019\nDO  - https://doi.org/10.5555/X\nER  - \n", None);
 //! assert_eq!(lib.references[0].doi.as_deref(), Some("10.5555/x"));
-//! let bib = pinakes::write(&lib.references, pinakes::Format::Biblatex).unwrap();
-//! assert!(bib.starts_with("@article{adeyemi2019moths,"));
+//! let out = pinakes::write(&lib.references, pinakes::Format::Biblatex).unwrap();
+//! assert!(out.text.starts_with("@article{adeyemi2019moths,"));
+//! assert!(out.diagnostics.is_empty());
 //! ```
 
+mod check;
 mod dates;
 mod dedupe;
 mod diag;
@@ -142,9 +145,20 @@ impl std::fmt::Display for ReadOnlyFormat {
 
 impl std::error::Error for ReadOnlyFormat {}
 
-/// Write references in a format. Fields the format has no place for are dropped, except source
-/// fields that came from the same format, which are written back as they were read. Records
-/// without a citation key get one from [`key_for`] in formats that need keys.
-pub fn write(refs: &[Reference], format: Format) -> Result<String, ReadOnlyFormat> {
-    formats::write_text(format, refs).ok_or(ReadOnlyFormat(format))
+/// What [`write`] returns.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Written {
+    pub text: String,
+    /// One for each value the format could not hold as it was: altered, shortened, moved to
+    /// another field or left out. Each names the record, by index and key, and the field.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Write references in a format. Source fields that came from the same format are written
+/// back as they were read. Records without a citation key get one from [`key_for`] in formats
+/// that need keys. Every value the format cannot hold as it was gets a diagnostic.
+pub fn write(refs: &[Reference], format: Format) -> Result<Written, ReadOnlyFormat> {
+    let mut diagnostics = Vec::new();
+    let text = formats::write_text(format, refs, &mut diagnostics).ok_or(ReadOnlyFormat(format))?;
+    Ok(Written { text, diagnostics })
 }

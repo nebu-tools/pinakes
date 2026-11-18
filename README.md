@@ -9,7 +9,9 @@ TypeScript, and a Python module. All four share one reader for each format. A re
 CSL-JSON item in every language, and fields that Pinakes does not know are kept.
 
 The readers do not stop at bad input and do not discard it silently. Each problem becomes a
-diagnostic with a code, a message and a line number, and reading continues. Pinakes reads
+diagnostic with a code, a message and a line number, and reading continues. Writers report
+in the same way: each value that the output format cannot hold as it was, and so leaves out
+or changes, becomes a diagnostic that names the record and the field. Pinakes reads
 UTF-8, UTF-16 and Windows-1252 (Latin-1) text, with or without a byte-order mark, and with
 any line endings.
 
@@ -98,6 +100,15 @@ bad.ris: 1 record as ris; 1 error, 0 warnings
 
 `check` prints only errors unless you add `--verbose`.
 
+`convert` prints on standard error what the output format could not hold, such as a BibTeX
+`owner` field written to RIS:
+
+```text
+<stdout>: warning ris.left-out: Record 1 (lind2020): ris has no place for custom.source-fields; left out [{"format":"bibtex","name":"owner","value":"eva"}]
+```
+
+Add `--strict` to make any of these a failure exit.
+
 Add `--json` to `check` or `dedupe` to get JSON instead of text.
 
 ### Rust
@@ -110,7 +121,7 @@ let lib = read(&bytes, None);
 for d in &lib.diagnostics {
     eprintln!("line {:?}: {}", d.line, d.message);
 }
-print!("{}", write(&lib.references, Format::CslJson)?);
+print!("{}", write(&lib.references, Format::CslJson)?.text);
 for pair in find_duplicates(&lib.references).pairs {
     let why: Vec<String> = pair.reasons.iter().map(|r| r.describe()).collect();
     println!("{} and {}: {}", pair.a, pair.b, why.join("; "));
@@ -125,7 +136,7 @@ import { read, write, findDuplicates } from "pinakes";
 
 const lib = read(readFileSync("refs.ris"));
 for (const d of lib.diagnostics) console.error(`line ${d.line}: ${d.message}`);
-console.log(write(lib.references, "biblatex"));
+console.log(write(lib.references, "biblatex").text);
 for (const pair of findDuplicates(lib.references).pairs) {
   console.log(pair.a, pair.b, pair.reasons.map((r) => r.text).join("; "));
 }
@@ -148,7 +159,7 @@ import pinakes
 lib = pinakes.read(pathlib.Path("refs.ris").read_bytes())
 for d in lib["diagnostics"]:
     print(f"line {d['line']}: {d['message']}")
-print(pinakes.write(lib["references"], "hayagriva"))
+print(pinakes.write(lib["references"], "hayagriva")["text"])
 for pair in pinakes.find_duplicates(lib["references"])["pairs"]:
     print(pair["a"], pair["b"], "; ".join(r["text"] for r in pair["reasons"]))
 ```

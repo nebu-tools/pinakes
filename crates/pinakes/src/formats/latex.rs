@@ -170,9 +170,26 @@ fn passthrough(cmd: &str) -> bool {
     )
 }
 
-/// Groups nest at most this deep before their contents are kept as plain text, so input
-/// cannot make the converter recurse without bound.
+/// Groups nest at most this deep. A group deeper than that is kept as it was written,
+/// unconverted, so input cannot make the converter recurse without bound; [`too_deep`] tells
+/// the reader, which reports it.
 const MAX_DEPTH: usize = 64;
+
+thread_local! {
+    /// Set when a conversion met a group deeper than [`MAX_DEPTH`].
+    static WENT_TOO_DEEP: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Whether converting `s` would keep part of it unconverted because its groups nest deeper
+/// than the converter goes.
+pub fn too_deep(s: &str) -> bool {
+    if s.bytes().filter(|&b| b == b'{').count() <= MAX_DEPTH {
+        return false;
+    }
+    WENT_TOO_DEEP.with(|f| f.set(false));
+    let _ = convert(s);
+    WENT_TOO_DEEP.with(|f| f.replace(false))
+}
 
 struct Parser<'a> {
     s: &'a [char],
@@ -212,7 +229,8 @@ impl Parser<'_> {
                 let end = self.i.saturating_sub(1).max(start).min(self.s.len());
                 let inner: String = self.s[start..end].iter().collect();
                 if self.depth >= MAX_DEPTH {
-                    return inner.chars().filter(|c| !matches!(c, '{' | '}')).collect();
+                    WENT_TOO_DEEP.with(|f| f.set(true));
+                    return self.s[start - 1..self.i.min(self.s.len())].iter().collect();
                 }
                 convert_at(&inner, self.depth + 1)
             }

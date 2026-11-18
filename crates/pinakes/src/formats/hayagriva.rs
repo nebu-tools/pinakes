@@ -4,6 +4,8 @@
 //! journal is its `parent`, of type `periodical`, and carries the volume and issue. The format
 //! is described at <https://github.com/typst/hayagriva/blob/main/docs/file-format.md>.
 
+use crate::check::{label, members, show};
+use crate::diag::Diagnostic;
 use crate::model::{Date, Name, Reference};
 
 /// Hayagriva's entry type and its parent's, for a CSL type.
@@ -33,6 +35,63 @@ fn types(kind: &str) -> (&'static str, Option<&'static str>) {
         "periodical" => ("periodical", None),
         "standard" => ("report", None),
         _ => ("misc", None),
+    }
+}
+
+/// The CSL types Hayagriva's types stand for: a type not listed here shares its Hayagriva
+/// type with one that is, and so cannot be told from it.
+const OWN_TYPES: &[&str] = &[
+    "article-journal",
+    "article-newspaper",
+    "article",
+    "book",
+    "chapter",
+    "paper-conference",
+    "report",
+    "thesis",
+    "webpage",
+    "post",
+    "patent",
+    "legal_case",
+    "legislation",
+    "manuscript",
+    "dataset",
+    "motion_picture",
+    "song",
+    "graphic",
+    "periodical",
+    "document",
+];
+
+/// What Hayagriva's person cannot hold of a name, if anything.
+fn name_loss(n: &Name) -> Option<&'static str> {
+    if n.is_others() {
+        Some("Hayagriva has no marker for names left out; wrote it as a person named \"others\"")
+    } else if !n.extra.is_empty() {
+        Some("Hayagriva has no place for its other members; left them out")
+    } else if n.dropping_particle.is_some() {
+        Some("Hayagriva has one prefix; wrote the dropping particle as it")
+    } else if n.literal.is_some()
+        && (n.family.is_some() || n.given.is_some() || n.particle.is_some() || n.suffix.is_some())
+    {
+        Some("Hayagriva holds a literal name or its parts, not both; wrote the literal")
+    } else if n.literal.is_none() && n.family.is_none() {
+        Some("Hayagriva needs a family name; wrote the name with an empty one")
+    } else {
+        None
+    }
+}
+
+/// What Hayagriva's date cannot hold of a date, if anything.
+fn date_loss(d: &Date) -> Option<&'static str> {
+    if date(d).is_none() {
+        Some("Hayagriva holds dates with a year from 0 to 9999; left it out")
+    } else if d.end.is_some() {
+        Some("Hayagriva has no date ranges; wrote the start")
+    } else if d.literal.is_some() || d.raw.is_some() || !d.extra.is_empty() {
+        Some("Hayagriva holds only the year, month, day and circa; wrote those")
+    } else {
+        None
     }
 }
 
@@ -219,11 +278,12 @@ impl Out {
 }
 
 /// Write references as a Hayagriva YAML document.
-pub fn write(refs: &[Reference]) -> String {
+pub fn write(refs: &[Reference], diags: &mut Vec<Diagnostic>) -> String {
     let keys = crate::key::keys_for_writing(refs);
     let mut o = Out { buf: String::new() };
-    for (r, key) in refs.iter().zip(&keys) {
+    for (i, (r, key)) in refs.iter().zip(&keys).enumerate() {
         let (kind, parent) = types(&r.kind);
+        report(r, i, key, diags);
         o.buf.push_str(&scalar(key));
         o.buf.push_str(":\n");
         o.field(2, "type", Some(kind));
@@ -307,6 +367,96 @@ pub fn write(refs: &[Reference]) -> String {
         }
     }
     o.buf
+}
+
+/// A diagnostic for each member of `r` that [`write`] does not write as it is.
+fn report(r: &Reference, i: usize, key: &str, diags: &mut Vec<Diagnostic>) {
+    let (kind, parent) = types(&r.kind);
+    let container = r
+        .container_title
+        .as_deref()
+        .or(r.collection_title.as_deref().filter(|_| parent.is_some()))
+        .map(crate::text::strip_markup)
+        .filter(|c| !c.trim().is_empty());
+    // With a parent type but no container title there is no parent to hold these.
+    let orphaned = parent.is_some() && container.is_none();
+    let label = label(r, i);
+    let left_out = "Hayagriva has no place for it; left it out";
+    for (k, v) in members(r) {
+        let text = v.as_str().unwrap_or_default();
+        let (code, what): (&'static str, String) = match k.as_str() {
+            "type" if OWN_TYPES.contains(&text) => continue,
+            "type" => (
+                "hayagriva.type",
+                format!("Hayagriva has no type of its own for it; wrote {kind}"),
+            ),
+            "citation-key" if text == key => continue,
+            "citation-key" => (
+                "hayagriva.changed",
+                format!("keys must be unique and plain; wrote {key:?}"),
+            ),
+            "title" | "abstract" | "container-title" if crate::text::strip_markup(text) != text => {
+                (
+                    "hayagriva.markup",
+                    "Hayagriva has no markup; wrote the text without it".to_string(),
+                )
+            }
+            "collection-title" if !(parent.is_some() && r.container_title.is_none()) => {
+                ("hayagriva.left-out", left_out.to_string())
+            }
+            "editor" | "publisher" | "publisher-place" | "volume" | "issue" if orphaned => (
+                "hayagriva.left-out",
+                "it belongs to the container, and the record names none; left it out".to_string(),
+            ),
+            "author" | "editor" => {
+                let names = if k == "author" { &r.author } else { &r.editor };
+                match names.iter().find_map(|n| name_loss(n).map(|w| (n, w))) {
+                    Some((n, w)) => ("hayagriva.name", format!("{}: {w}", n.inverted())),
+                    None => continue,
+                }
+            }
+            "issued" | "accessed" => {
+                let d = if k == "issued" {
+                    &r.issued
+                } else {
+                    &r.accessed
+                };
+                let url = r.url.as_deref().is_some_and(url_like);
+                match d.as_ref().and_then(date_loss) {
+                    _ if k == "accessed" && !url => (
+                        "hayagriva.left-out",
+                        "Hayagriva holds an access date only with a URL; left it out".to_string(),
+                    ),
+                    Some(w) => ("hayagriva.changed", w.to_string()),
+                    None => continue,
+                }
+            }
+            "language" if !language_tag(text) => (
+                "hayagriva.left-out",
+                "Hayagriva takes only a language tag such as \"en\" here; left it out".to_string(),
+            ),
+            "URL" if !url_like(text) => (
+                "hayagriva.left-out",
+                "Hayagriva refuses a file over a URL it cannot parse; left it out".to_string(),
+            ),
+            "title" | "abstract" | "container-title" | "collection-title" | "publisher"
+            | "publisher-place" | "volume" | "issue" | "edition" | "page" | "genre" | "note"
+            | "language" | "URL" | "DOI" | "PMID" | "PMCID" | "ISBN" | "ISSN" | "custom.arxiv"
+            | "number" => {
+                if text.trim().is_empty() {
+                    ("hayagriva.left-out", "it is blank; left it out".to_string())
+                } else {
+                    continue;
+                }
+            }
+            _ => ("hayagriva.left-out", left_out.to_string()),
+        };
+        diags.push(
+            Diagnostic::warning(code, format!("{label}: {k} {}: {what}", show(&v)))
+                .record(i)
+                .field(k),
+        );
+    }
 }
 
 #[cfg(test)]

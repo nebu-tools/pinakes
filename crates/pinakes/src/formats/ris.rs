@@ -711,9 +711,29 @@ fn ris_name(n: &crate::model::Name) -> String {
     }
 }
 
-pub fn write(refs: &[Reference]) -> String {
+pub fn write(refs: &[Reference], diags: &mut Vec<Diagnostic>) -> String {
     let mut out = String::new();
-    for r in refs {
+    for (i, r) in refs.iter().enumerate() {
+        // RIS has one way to write "and others", and it is also a name: an organisation called
+        // "et al." or a person whose name is "others" reads back as the marker.
+        for (field, names) in [("author", &r.author), ("editor", &r.editor)] {
+            for n in names {
+                if !n.is_others() && parse_ris_name(&ris_name(n)).is_others() {
+                    diags.push(
+                        Diagnostic::warning(
+                            "ris.et-al",
+                            format!(
+                                "{}: RIS cannot tell the name {:?} from the marker for names left out; it reads back as the marker",
+                                crate::check::label(r, i),
+                                n.inverted()
+                            ),
+                        )
+                        .record(i)
+                        .field(field),
+                    );
+                }
+            }
+        }
         let ty = r
             .source_fields_of(FORMAT)
             .find(|f| f.name == "TY")
@@ -895,7 +915,7 @@ mod tests {
     #[test]
     fn unknown_tags_survive_a_round_trip() {
         let (refs, _) = read_str("TY  - JOUR\nTI  - Moths\nQZ  - keep me\nQZ  - and me\nER  - \n");
-        let out = write(&refs);
+        let out = write(&refs, &mut Vec::new());
         assert!(out.contains("QZ  - keep me\nQZ  - and me\n"), "{out}");
         let (again, _) = read_str(&out);
         assert_eq!(again, refs);
@@ -928,7 +948,7 @@ mod tests {
             abstract_text: Some("One.\n\nTwo.\nThree.".into()),
             ..Reference::default()
         };
-        let text = write(std::slice::from_ref(&r));
+        let text = write(std::slice::from_ref(&r), &mut Vec::new());
         assert!(text.contains("AB  - One.\n\nTwo.\nThree.\n"), "{text}");
         let (back, _) = read_str(&text);
         assert_eq!(back[0].abstract_text, r.abstract_text);

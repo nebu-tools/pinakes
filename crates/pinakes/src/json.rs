@@ -14,7 +14,7 @@ use crate::diag::{Diagnostic, Severity};
 use crate::formats::Format;
 use crate::id::IdKind;
 use crate::model::Reference;
-use crate::Library;
+use crate::{Library, Written};
 use serde::ser::{Serialize, SerializeMap, Serializer};
 
 macro_rules! by_name {
@@ -36,12 +36,13 @@ by_name! {
 
 impl Serialize for Diagnostic {
     fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
-        let mut m = s.serialize_map(Some(5))?;
+        let mut m = s.serialize_map(Some(6))?;
         m.serialize_entry("severity", &self.severity)?;
         m.serialize_entry("code", self.code)?;
         m.serialize_entry("message", &self.message)?;
         m.serialize_entry("line", &self.line)?;
         m.serialize_entry("record", &self.record)?;
+        m.serialize_entry("field", &self.field)?;
         m.end()
     }
 }
@@ -116,6 +117,15 @@ impl Serialize for Library {
         let mut m = s.serialize_map(Some(3))?;
         m.serialize_entry("format", &self.format)?;
         m.serialize_entry("references", &self.references)?;
+        m.serialize_entry("diagnostics", &self.diagnostics)?;
+        m.end()
+    }
+}
+
+impl Serialize for Written {
+    fn serialize<S: Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        let mut m = s.serialize_map(Some(2))?;
+        m.serialize_entry("text", &self.text)?;
         m.serialize_entry("diagnostics", &self.diagnostics)?;
         m.end()
     }

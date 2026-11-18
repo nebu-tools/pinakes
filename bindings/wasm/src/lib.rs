@@ -40,6 +40,7 @@ pub fn read_json(bytes: &[u8], format_name: Option<String>) -> Result<String, Js
 #[wasm_bindgen(js_name = writeJson)]
 pub fn write_json(references: &str, format_name: &str) -> Result<String, JsError> {
     pinakes::write(&items(references)?, format(format_name)?)
+        .map(|w| json(&w))
         .map_err(|e| JsError::new(&e.to_string()))
 }
 

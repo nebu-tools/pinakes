@@ -1,7 +1,10 @@
 //! Deeply nested input reaches no reader or writer as unbounded recursion. Every test runs on a
 //! thread with a small stack, so a recursive descent over the nesting would overflow it.
+//!
+//! Where a reader stops at a depth limit it says so, and keeps the text. Readers that do not
+//! interpret nesting keep the value exactly.
 
-use pinakes::{read, write, Format, Reference};
+use pinakes::{read, write, Format, Library, Reference};
 use serde_json::{json, Value};
 
 /// Nesting this deep in every test. With a recursive step per level, even a small frame would
@@ -34,13 +37,29 @@ fn deep_text_of(n: usize) -> String {
     s
 }
 
-/// Read `text` as `format`: one record, and nothing that panics or overflows.
-fn reads_one(format: Format, text: String) {
+/// Read `text` as `format`: one record, and nothing that panics or overflows. Then run `check`
+/// on what was read.
+fn reads_one(format: Format, text: String, check: impl FnOnce(&Library) + Send + 'static) {
     small_stack(move || {
         let lib = read(text.as_bytes(), Some(format));
         assert_eq!(lib.references.len(), 1, "{format}: {:?}", lib.diagnostics);
         assert!(lib.references[0].title.is_some(), "{format}");
+        check(&lib);
     });
+}
+
+/// The title is the deep text exactly, and nothing was reported but a missing accession number.
+fn kept_exactly(lib: &Library) {
+    assert!(
+        lib.references[0].title.as_deref() == Some(deep_text().as_str()),
+        "the title changed"
+    );
+    let other: Vec<_> = lib
+        .diagnostics
+        .iter()
+        .filter(|d| d.code != "wos.no-ut")
+        .collect();
+    assert!(other.is_empty(), "{other:?}");
 }
 
 #[test]
@@ -48,6 +67,7 @@ fn ris() {
     reads_one(
         Format::Ris,
         format!("TY  - JOUR\nTI  - {}\nER  - \n", deep_text()),
+        kept_exactly,
     );
 }
 
@@ -55,7 +75,21 @@ fn ris() {
 fn bibtex() {
     reads_one(
         Format::Bibtex,
-        format!("@article{{k,title={{{}}}}}\n", deep_text()),
+        format!("@article{{k,\n  title={{{}}}}}\n", deep_text()),
+        |lib| {
+            let d: Vec<_> = lib
+                .diagnostics
+                .iter()
+                .filter(|d| d.code == "bibtex.too-deep")
+                .collect();
+            assert_eq!(d.len(), 1, "{:?}", lib.diagnostics);
+            assert_eq!(d[0].field.as_deref(), Some("title"));
+            assert_eq!(d[0].line, Some(2));
+            assert_eq!(d[0].record, Some(0));
+            // The part beyond the limit is kept as it was written, unconverted.
+            let title = lib.references[0].title.as_deref().unwrap();
+            assert!(title.contains("\\textit{\\textit{T}}"), "{}", &title[..200]);
+        },
     );
     // Unbalanced: every group opened and none closed.
     small_stack(|| {
@@ -67,7 +101,11 @@ fn bibtex() {
 
 #[test]
 fn medline() {
-    reads_one(Format::Medline, format!("PMID- 1\nTI  - {}\n", deep_text()));
+    reads_one(
+        Format::Medline,
+        format!("PMID- 1\nTI  - {}\n", deep_text()),
+        kept_exactly,
+    );
 }
 
 #[test]
@@ -81,6 +119,19 @@ fn pubmed_xml() {
              <ArticleTitle>{title}</ArticleTitle>{unknown}</Article></MedlineCitation>\
              </PubmedArticle></PubmedArticleSet>"
         ),
+        |lib| {
+            assert!(
+                lib.diagnostics.iter().any(|d| d.code == "xml.too-deep"),
+                "{:?}",
+                lib.diagnostics
+            );
+            // Markup down to the limit is kept, and the text inside the deeper tags.
+            let title = lib.references[0].title.as_deref().unwrap();
+            assert!(
+                title.starts_with("<i><i>") && title.contains("<i>T</i>"),
+                "{title}"
+            );
+        },
     );
 }
 
@@ -89,6 +140,7 @@ fn csl_json() {
     reads_one(
         Format::CslJson,
         json!([{"id": "a", "type": "book", "title": deep_text()}]).to_string(),
+        kept_exactly,
     );
     // Nesting in members Pinakes keeps, and at the top: serde_json's limit refuses it with a
     // diagnostic, without overflowing.
@@ -99,7 +151,11 @@ fn csl_json() {
             deep.clone(),
         ] {
             let lib = read(text.as_bytes(), Some(Format::CslJson));
-            assert!(!lib.diagnostics.is_empty());
+            assert!(
+                lib.diagnostics.iter().any(|d| d.code == "csl.bad-json"),
+                "{:?}",
+                lib.diagnostics
+            );
         }
     });
 }
@@ -112,6 +168,7 @@ fn wos_text() {
             "FN Clarivate Analytics Web of Science\nVR 1.0\nPT J\nTI {}\nER\nEF\n",
             deep_text()
         ),
+        kept_exactly,
     );
 }
 
@@ -120,6 +177,7 @@ fn wos_tab() {
     reads_one(
         Format::WosTab,
         format!("PT\tAU\tTI\nJ\tLind, K\t{}\n", deep_text()),
+        kept_exactly,
     );
 }
 
@@ -128,6 +186,7 @@ fn csv() {
     reads_one(
         Format::Csv,
         format!("Title,Year\n\"{}\",2020\n", deep_text()),
+        kept_exactly,
     );
 }
 
@@ -156,7 +215,7 @@ fn deep_reference() -> Reference {
 fn writers_and_their_readers() {
     for format in Format::ALL.into_iter().filter(|f| f.can_write()) {
         small_stack(move || {
-            let out = write(&[deep_reference()], format).unwrap();
+            let out = write(&[deep_reference()], format).unwrap().text;
             assert!(out.contains('T'), "{format}");
             if format.can_read() {
                 let lib = read(out.as_bytes(), Some(format));

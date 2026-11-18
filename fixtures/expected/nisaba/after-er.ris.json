@@ -6,6 +6,7 @@
       "code": "ris.stray-text",
       "line": 3,
       "record": null,
+      "field": null,
       "message": "Text outside any record was not read: \"- after end\""
     },
     {
@@ -13,6 +14,7 @@
       "code": "record.no-title",
       "line": 1,
       "record": 0,
+      "field": null,
       "message": "Record 1 has no title"
     }
   ],

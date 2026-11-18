@@ -6,6 +6,7 @@
       "code": "text.windows-1252",
       "line": 2,
       "record": null,
+      "field": null,
       "message": "Text is not UTF-8; read it as Windows-1252 (Latin-1)"
     }
   ],

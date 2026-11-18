@@ -2,7 +2,9 @@
 //!
 //! Every command reads the files it is given, or standard input for `-` or no file at all, and
 //! prints each diagnostic to standard error as `file:line: severity code: message`. It exits 1
-//! when any input had an error, and 2 when a file could not be opened or written.
+//! when any input had an error, and 2 when a file could not be opened or written. `convert`
+//! also prints, always, each value the output format could not hold as it was; with
+//! `--strict` any of those makes it exit 1 too.
 
 use clap::{Args, Parser, Subcommand};
 use pinakes::{Format, Library, Reference, Severity};
@@ -40,6 +42,9 @@ enum Command {
         /// Replace every citation key with a generated one.
         #[arg(long)]
         rekey: bool,
+        /// Exit 1 when the output format cannot hold any value as it was.
+        #[arg(long)]
+        strict: bool,
     },
     /// Report what Pinakes makes of files, without writing them.
     Check {
@@ -97,6 +102,7 @@ fn run(cli: Cli) -> Result<bool, String> {
             output,
             keys,
             rekey,
+            strict,
         } => {
             if !to.can_write() {
                 return Err(format!("{}", pinakes::write(&[], to).unwrap_err()));
@@ -108,7 +114,13 @@ fn run(cli: Cli) -> Result<bool, String> {
             if keys || rekey {
                 pinakes::assign_keys(&mut refs, rekey);
             }
-            let text = pinakes::write(&refs, to).map_err(|e| e.to_string())?;
+            let written = pinakes::write(&refs, to).map_err(|e| e.to_string())?;
+            let name = output
+                .as_ref()
+                .map_or("<stdout>".to_string(), |p| p.display().to_string());
+            print_diagnostics(&name, &written.diagnostics, true);
+            let faithful = !strict || written.diagnostics.is_empty();
+            let text = written.text;
             match output {
                 Some(path) => std::fs::write(&path, text)
                     .map_err(|e| format!("cannot write {}: {e}", path.display()))?,
@@ -116,7 +128,7 @@ fn run(cli: Cli) -> Result<bool, String> {
                     .write_all(text.as_bytes())
                     .map_err(|e| format!("cannot write: {e}"))?,
             }
-            Ok(clean)
+            Ok(clean && faithful)
         }
         Command::Check { input, json } => {
             let sources = read_all(&input)?;
@@ -264,24 +276,28 @@ fn plural(n: usize, word: &str) -> String {
 /// Print diagnostics: errors always, the rest when `all`. True when there were no errors.
 fn report(sources: &[Source], all: bool) -> bool {
     let mut clean = true;
-    let stderr = io::stderr();
-    let mut err = stderr.lock();
     for s in sources {
-        for d in &s.lib.diagnostics {
-            clean &= d.severity != Severity::Error;
-            if !all && d.severity != Severity::Error {
-                continue;
-            }
-            let at = d.line.map(|l| format!(":{l}")).unwrap_or_default();
-            let _ = writeln!(
-                err,
-                "{}{at}: {} {}: {}",
-                s.name,
-                d.severity.as_str(),
-                d.code,
-                d.message
-            );
-        }
+        clean &= !s.lib.has_errors();
+        print_diagnostics(&s.name, &s.lib.diagnostics, all);
     }
     clean
+}
+
+/// Print one file's diagnostics: errors always, the rest when `all`.
+fn print_diagnostics(name: &str, diagnostics: &[pinakes::Diagnostic], all: bool) {
+    let stderr = io::stderr();
+    let mut err = stderr.lock();
+    for d in diagnostics {
+        if !all && d.severity != Severity::Error {
+            continue;
+        }
+        let at = d.line.map(|l| format!(":{l}")).unwrap_or_default();
+        let _ = writeln!(
+            err,
+            "{name}{at}: {} {}: {}",
+            d.severity.as_str(),
+            d.code,
+            d.message
+        );
+    }
 }

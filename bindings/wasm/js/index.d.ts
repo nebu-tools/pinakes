@@ -88,6 +88,21 @@ export interface Diagnostic {
   line: number | null;
   /** 0-based index of the record in `references`. */
   record: number | null;
+  /**
+   * The field the problem is in: the source field for `read` (`TI`, `title`), the CSL-JSON
+   * variable for `write` (`title`, `URL`, `author`, `custom.source-fields`).
+   */
+  field: string | null;
+}
+
+/** What `write` returns. */
+export interface Written {
+  text: string;
+  /**
+   * One for each value the format could not hold as it was: altered, shortened, moved to
+   * another field or left out. Each names the record and the field.
+   */
+  diagnostics: Diagnostic[];
 }
 
 export interface Library {
@@ -148,8 +163,11 @@ export interface FormatInfo {
 export interface Pinakes {
   /** Read a file's bytes or text. Never throws for bad input; problems are diagnostics. */
   read(input: Uint8Array | string, options?: { format?: FormatName }): Library;
-  /** Write references. Throws for a format Pinakes only reads. */
-  write(references: Reference | Reference[], format: WritableFormat): string;
+  /**
+   * Write references, with a diagnostic for each value the format could not hold as it was.
+   * Throws for a format Pinakes only reads.
+   */
+  write(references: Reference | Reference[], format: WritableFormat): Written;
   /** Put identifiers and page ranges in normal form. `read` has already done this. */
   normalise(references: Reference | Reference[]): {
     references: Reference[];

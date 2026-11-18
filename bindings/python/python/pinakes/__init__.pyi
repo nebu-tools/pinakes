@@ -29,6 +29,14 @@ class Diagnostic(TypedDict):
     message: str
     line: Optional[int]
     record: Optional[int]
+    # The source field for read ("TI", "title"), the CSL-JSON variable for write ("title",
+    # "URL", "author", "custom.source-fields").
+    field: Optional[str]
+
+class Written(TypedDict):
+    text: str
+    # One for each value the format could not hold as it was, naming the record and the field.
+    diagnostics: list[Diagnostic]
 
 class Library(TypedDict):
     format: Optional[FormatName]
@@ -75,7 +83,7 @@ class FormatInfo(TypedDict):
     write: bool
 
 def read(data: Union[bytes, str], format: Optional[FormatName] = None) -> Library: ...
-def write(references: References, format: WritableFormat) -> str: ...
+def write(references: References, format: WritableFormat) -> Written: ...
 def normalise(references: References) -> Normalised: ...
 def assign_keys(references: References, replace: bool = False) -> list[Reference]: ...
 def key_for(reference: Mapping[str, Any]) -> str: ...

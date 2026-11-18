@@ -435,7 +435,7 @@ fn issued_with_pd(year: i32, pd: Option<&str>) -> Date {
 mod tests {
     use super::*;
 
-    const TEXT: &str = "FN Clarivate Analytics Web of Science\nVR 1.0\nPT J\nAU Adeyemi, AN\n   Lind, M\nAF Adeyemi, Ada N.\n   Lind, Maja\nCA Coastal Survey Team\nTI Moths at the edge of the\n   forest\nSO JOURNAL OF ANIMAL ECOLOGY\nDT Article; Early Access\nPD JUL 15\nPY 2019\nVL 88\nBP 1002\nEP 1013\nDI 10.5555/jae.2019.0001\nPM 31000001\nUT WOS:000000000000001\nER\n\nPT J\nAU Smith, J\nTI Second\nPY 2020\nUT WOS:000000000000002\nER\n\nEF\n";
+    const TEXT: &str = "FN Clarivate Analytics Web of Science\nVR 1.0\nPT J\nAU Adeyemi, AN\n   Lind, M\nAF Adeyemi, Ada N.\n   Lind, Maja\nCA Coastal Survey Group\nTI Moths at the edge of the\n   forest\nSO JOURNAL OF ANIMAL ECOLOGY\nDT Article; Early Access\nPD JUL 15\nPY 2019\nVL 88\nBP 1002\nEP 1013\nDI 10.5555/jae.2019.0001\nPM 31000001\nUT WOS:000000000000001\nER\n\nPT J\nAU Smith, J\nTI Second\nPY 2020\nUT WOS:000000000000002\nER\n\nEF\n";
 
     #[test]
     fn plain_text() {
@@ -446,7 +446,7 @@ mod tests {
         assert_eq!(r.title.as_deref(), Some("Moths at the edge of the forest"));
         assert_eq!(r.author.len(), 3);
         assert_eq!(r.author[0].given.as_deref(), Some("Ada N."));
-        assert_eq!(r.author[2].literal.as_deref(), Some("Coastal Survey Team"));
+        assert_eq!(r.author[2].literal.as_deref(), Some("Coastal Survey Group"));
         assert_eq!(r.page.as_deref(), Some("1002-1013"));
         assert_eq!(r.issued.as_ref().unwrap().start.unwrap().month, Some(7));
         assert_eq!(r.id, "WOS:000000000000001");

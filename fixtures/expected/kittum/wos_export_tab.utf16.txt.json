@@ -6,6 +6,7 @@
       "code": "text.utf16",
       "line": null,
       "record": null,
+      "field": null,
       "message": "Read UTF-16 (little-endian) text"
     }
   ],

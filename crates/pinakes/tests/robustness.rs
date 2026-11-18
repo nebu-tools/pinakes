@@ -84,7 +84,7 @@ proptest! {
             check(&lib);
             // Whatever was read can be written in every format, and read back.
             for out in Format::ALL.into_iter().filter(|f| f.can_write()) {
-                let written = write(&lib.references, out).unwrap();
+                let written = write(&lib.references, out).unwrap().text;
                 if out.can_read() {
                     check(&read(written.as_bytes(), Some(out)));
                 }
@@ -139,12 +139,15 @@ fn round_trips() {
         let name = path.display();
         // CSL-JSON is the model's own format: nothing is lost, unknown fields included.
         let csl = read(
-            write(&lib.references, Format::CslJson).unwrap().as_bytes(),
+            write(&lib.references, Format::CslJson)
+                .unwrap()
+                .text
+                .as_bytes(),
             Some(Format::CslJson),
         );
         assert_eq!(csl.references, lib.references, "{name}: CSL-JSON");
         for f in [Format::Ris, Format::Bibtex, Format::Biblatex] {
-            let text = write(&lib.references, f).unwrap();
+            let text = write(&lib.references, f).unwrap().text;
             let back = read(text.as_bytes(), Some(f));
             assert_eq!(
                 back.references.len(),
@@ -156,7 +159,7 @@ fn round_trips() {
             }
             // Writing what was read back gives the same text: the writers are stable.
             assert_eq!(
-                write(&back.references, f).unwrap(),
+                write(&back.references, f).unwrap().text,
                 text,
                 "{name}: {f} is not stable"
             );

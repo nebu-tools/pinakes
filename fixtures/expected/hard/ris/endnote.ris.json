@@ -6,6 +6,7 @@
       "code": "ris.missing-er",
       "line": 53,
       "record": 3,
+      "field": null,
       "message": "Record starting on line 53 has no ER at the end of the input; kept it"
     }
   ],

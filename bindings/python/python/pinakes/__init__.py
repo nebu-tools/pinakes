@@ -40,9 +40,13 @@ def read(data: Union[bytes, str], format: Optional[str] = None) -> dict:
     return json.loads(_pinakes.read_json(data, format))
 
 
-def write(references, format: str) -> str:
-    """Write references as ris, bibtex, biblatex, csl-json or hayagriva."""
-    return _pinakes.write_json(_items(references), format)
+def write(references, format: str) -> dict:
+    """Write references as ris, bibtex, biblatex, csl-json or hayagriva.
+
+    Returns ``{"text", "diagnostics"}``: one diagnostic for each value the format could not
+    hold as it was, naming the record and the field.
+    """
+    return json.loads(_pinakes.write_json(_items(references), format))
 
 
 def normalise(references) -> dict:

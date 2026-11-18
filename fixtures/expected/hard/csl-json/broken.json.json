@@ -6,6 +6,7 @@
       "code": "csl.bad-json",
       "line": 4,
       "record": null,
+      "field": null,
       "message": "Not valid JSON: expected `,` or `}` at line 4 column 1"
     }
   ],

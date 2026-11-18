@@ -6,6 +6,7 @@
       "code": "text.bom",
       "line": null,
       "record": null,
+      "field": null,
       "message": "Removed a UTF-8 byte-order mark"
     }
   ],

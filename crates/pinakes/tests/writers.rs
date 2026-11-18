@@ -6,8 +6,13 @@
 //!
 //! CSL-JSON goes the other way too: any CSL-shaped object, unknown members included, reads and
 //! writes back as it came.
+//!
+//! Reports: whatever a writer could not write as it was, a diagnostic names, with the record
+//! and the field.
 
-use pinakes::{normalise, read, write, Date, Format, Name, Reference, Severity, SourceField};
+use pinakes::{
+    normalise, read, write, Date, Diagnostic, Format, Name, Reference, Severity, SourceField,
+};
 use proptest::prelude::*;
 use serde_json::{json, Map, Value};
 
@@ -237,12 +242,12 @@ proptest! {
     fn no_value_breaks_the_framing(a in reference(), b in reference()) {
         let refs = [a, b];
         for f in TEXT_FORMATS {
-            let text = write(&refs, f).unwrap();
+            let text = write(&refs, f).unwrap().text;
             let back = read(text.as_bytes(), Some(f));
             prop_assert_eq!(back.references.len(), 2, "{}\n{}\n{:?}", f, text, back.diagnostics);
             prop_assert!(errors(&back).is_empty(), "{}\n{}\n{:?}", f, text, errors(&back));
         }
-        let yaml = write(&refs, Format::Hayagriva).unwrap();
+        let yaml = write(&refs, Format::Hayagriva).unwrap().text;
         let lib = hayagriva::io::from_yaml_str(&yaml);
         prop_assert!(lib.is_ok(), "hayagriva rejected\n{}\n{:?}", yaml, lib.err());
         prop_assert_eq!(lib.unwrap().len(), 2, "{}", yaml);
@@ -253,7 +258,7 @@ proptest! {
     fn text_survives_write_and_read(r in reference()) {
         let r = normal(r);
         for f in TEXT_FORMATS {
-            let text = write(std::slice::from_ref(&r), f).unwrap();
+            let text = write(std::slice::from_ref(&r), f).unwrap().text;
             let back = read(text.as_bytes(), Some(f));
             prop_assert_eq!(back.references.len(), 1, "{}\n{}", f, text);
             let b = &back.references[0];
@@ -271,12 +276,12 @@ proptest! {
                 };
                 prop_assert_eq!(count(&r.author), b.author.len(), "{}", text);
                 prop_assert_eq!(count(&r.editor), b.editor.len(), "{}", text);
-                let again = read(write(std::slice::from_ref(b), f).unwrap().as_bytes(), Some(f));
+                let again = read(write(std::slice::from_ref(b), f).unwrap().text.as_bytes(), Some(f));
                 prop_assert_eq!(&again.references[0].author, &b.author);
                 prop_assert_eq!(&again.references[0].editor, &b.editor);
             }
         }
-        let yaml = write(std::slice::from_ref(&r), Format::Hayagriva).unwrap();
+        let yaml = write(std::slice::from_ref(&r), Format::Hayagriva).unwrap().text;
         let lib = hayagriva::io::from_yaml_str(&yaml);
         prop_assert!(lib.is_ok(), "hayagriva rejected\n{}\n{:?}", yaml, lib.err());
         let lib = lib.unwrap();
@@ -297,8 +302,211 @@ proptest! {
         let text = serde_json::to_string_pretty(&input).unwrap();
         let lib = read(text.as_bytes(), Some(Format::CslJson));
         prop_assert!(errors(&lib).is_empty(), "{:?}", errors(&lib));
-        let out: Value = serde_json::from_str(&write(&lib.references, Format::CslJson).unwrap()).unwrap();
+        let out: Value = serde_json::from_str(&write(&lib.references, Format::CslJson).unwrap().text).unwrap();
         prop_assert_eq!(out, input);
+    }
+}
+
+/// A reference with unknown CSL-JSON members beside the typed ones.
+fn reference_with_extra() -> impl Strategy<Value = Reference> {
+    (
+        reference(),
+        unknown_members(&[]),
+        prop::collection::vec(prop::option::of(unknown_members(&[])), 0..2),
+    )
+        .prop_map(|(mut r, extra, custom)| {
+            r.extra = extra;
+            if let Some(Some(c)) = custom.into_iter().next() {
+                if !c.is_empty() {
+                    r.extra.insert("custom".into(), Value::Object(c));
+                }
+            }
+            r
+        })
+}
+
+proptest! {
+    #![proptest_config(ProptestConfig::with_cases(256))]
+
+    /// Every member that does not come back from a writer's output as it went in is named by a
+    /// diagnostic, from the writer or from reading the output, with its record and field.
+    #[test]
+    fn every_loss_is_reported(a in reference_with_extra(), b in reference_with_extra()) {
+        let refs = [a, b];
+        let want: Vec<_> = refs
+            .iter()
+            .map(|r| {
+                let mut r = r.clone();
+                normalise(&mut r);
+                r
+            })
+            .collect();
+        let want_members = csl_members(&want);
+        for f in [Format::Ris, Format::Bibtex, Format::Biblatex, Format::CslJson] {
+            let out = write(&refs, f).unwrap();
+            let back = read(out.text.as_bytes(), Some(f));
+            if back.references.len() != refs.len() {
+                prop_assert!(
+                    out.diagnostics.iter().any(|d| d.severity == Severity::Error),
+                    "{}: record count changed with no error\n{}", f, out.text
+                );
+                continue;
+            }
+            let mut got_members = csl_members(&back.references);
+            if f == Format::Ris {
+                // RIS keeps the key on its ID line, which reads back as the id.
+                for ((w, g), b) in want_members.iter().zip(&mut got_members).zip(&back.references) {
+                    if !g.contains_key("citation-key")
+                        && w.get("citation-key").and_then(|k| k.as_str()) == Some(b.id.as_str())
+                    {
+                        g.insert("citation-key".into(), w["citation-key"].clone());
+                    }
+                }
+            }
+            let all: Vec<&Diagnostic> = out.diagnostics.iter().chain(&back.diagnostics).collect();
+            for (i, (w, g)) in want_members.iter().zip(&got_members).enumerate() {
+                for k in w.keys().chain(g.keys()) {
+                    if w.get(k) == g.get(k)
+                        || (k == "citation-key" && !w.contains_key(k))
+                    {
+                        continue;
+                    }
+                    let named = all
+                        .iter()
+                        .any(|d| d.record == Some(i) && d.field.as_deref() == Some(k.as_str()));
+                    prop_assert!(
+                        named,
+                        "{}: record {} field {} went from {:?} to {:?} with no diagnostic\n{}\n{:?}",
+                        f, i, k, w.get(k), g.get(k), out.text, out.diagnostics
+                    );
+                }
+            }
+            if f == Format::CslJson {
+                prop_assert!(out.diagnostics.is_empty(), "{:?}", out.diagnostics);
+            }
+        }
+        let out = write(&refs, Format::Hayagriva).unwrap();
+        let lib = hayagriva::io::from_yaml_str(&out.text);
+        prop_assert!(lib.is_ok(), "hayagriva rejected\n{}", out.text);
+        let lib = lib.unwrap();
+        // Hayagriva has no reader in Pinakes: compare with the record as it was given.
+        for (i, (r, entry)) in refs.iter().zip(lib.iter()).enumerate() {
+            for (ours, theirs) in hayagriva_held(r).into_iter().zip(hayagriva_fields(entry)) {
+                if ours == theirs {
+                    continue;
+                }
+                let field = if ours.0 == "authors" { "author" } else { ours.0 };
+                let named = out
+                    .diagnostics
+                    .iter()
+                    .any(|d| d.record == Some(i) && d.field.as_deref() == Some(field));
+                prop_assert!(
+                    named,
+                    "hayagriva: record {} field {} went from {:?} to {:?} with no diagnostic\n{}\n{:?}",
+                    i, field, ours.1, theirs.1, out.text, out.diagnostics
+                );
+            }
+        }
+    }
+}
+
+/// Each record as CSL-JSON members, `custom` flattened to `custom.<name>`, without `id` and
+/// without the copies of typed values that the CSL-JSON reader keeps beside them.
+fn csl_members(refs: &[Reference]) -> Vec<Map<String, Value>> {
+    let refs: Vec<Reference> = refs.iter().map(without_forms).collect();
+    let v: Value = serde_json::from_str(&write(&refs, Format::CslJson).unwrap().text).unwrap();
+    let Value::Array(items) = v else {
+        panic!("CSL-JSON output is not an array")
+    };
+    items
+        .into_iter()
+        .map(|item| {
+            let Value::Object(mut m) = item else {
+                panic!("CSL-JSON item is not an object")
+            };
+            m.remove("id");
+            if let Some(Value::Object(custom)) = m.remove("custom") {
+                for (k, v) in custom {
+                    m.insert(format!("custom.{k}"), v);
+                }
+            }
+            m.retain(|_, v| !blank(v));
+            m.values_mut().for_each(drop_blank);
+            m
+        })
+        .collect()
+}
+
+/// The record without what the CSL-JSON reader keeps of the form a typed value was written in:
+/// every kept member whose name a typed value writes to. The generated records have no unknown
+/// members with those names.
+fn without_forms(r: &Reference) -> Reference {
+    let bare = Reference {
+        extra: Map::new(),
+        ..r.clone()
+    };
+    let typed: Value = serde_json::from_str(
+        &write(std::slice::from_ref(&bare), Format::CslJson)
+            .unwrap()
+            .text,
+    )
+    .unwrap();
+    let typed = typed[0].as_object().unwrap().clone();
+    let mut out = r.clone();
+    out.extra.retain(|k, _| {
+        !typed.contains_key(k) && !["id", "keyword", "author", "editor"].contains(&k.as_str())
+    });
+    if let Some(Value::Object(custom)) = out.extra.get_mut("custom") {
+        custom.retain(|k, _| {
+            ![
+                "arxiv",
+                "accession-number",
+                "database",
+                "publication-type",
+                "source-fields",
+            ]
+            .contains(&k.as_str())
+        });
+    }
+    for n in out.author.iter_mut().chain(out.editor.iter_mut()) {
+        n.extra.retain(|k, _| {
+            ![
+                "family",
+                "given",
+                "literal",
+                "suffix",
+                "non-dropping-particle",
+                "dropping-particle",
+            ]
+            .contains(&k.as_str())
+        });
+    }
+    for d in [&mut out.issued, &mut out.accessed].into_iter().flatten() {
+        d.extra
+            .retain(|k, _| !["date-parts", "circa", "literal", "raw"].contains(&k.as_str()));
+    }
+    out
+}
+
+/// A value that says nothing, which no format needs to keep.
+fn blank(v: &Value) -> bool {
+    match v {
+        Value::String(s) => s.trim().is_empty(),
+        Value::Array(a) => a.iter().all(blank),
+        Value::Object(o) => o.values().all(blank),
+        _ => false,
+    }
+}
+
+/// Remove the members of every object inside `v` that say nothing.
+fn drop_blank(v: &mut Value) {
+    match v {
+        Value::Array(a) => a.iter_mut().for_each(drop_blank),
+        Value::Object(o) => {
+            o.retain(|_, v| !blank(v));
+            o.values_mut().for_each(drop_blank);
+        }
+        _ => {}
     }
 }
 

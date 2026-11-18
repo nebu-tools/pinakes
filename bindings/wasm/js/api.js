@@ -11,7 +11,7 @@ export function bind(raw) {
       return JSON.parse(raw.readJson(text(input), options.format ?? undefined));
     },
     write(references, format) {
-      return raw.writeJson(items(references), format);
+      return JSON.parse(raw.writeJson(items(references), format));
     },
     normalise(references) {
       const lib = JSON.parse(raw.normaliseJson(items(references)));

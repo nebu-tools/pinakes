@@ -55,7 +55,7 @@ fn written_keys(refs: &[Reference]) -> Vec<String> {
 fn hayagriva_reads_our_yaml() {
     let mut checked = 0;
     for (rel, refs, _) in fixtures() {
-        let yaml = write(&refs, Format::Hayagriva).unwrap();
+        let yaml = write(&refs, Format::Hayagriva).unwrap().text;
         let lib = hayagriva::io::from_yaml_str(&yaml)
             .unwrap_or_else(|e| panic!("{rel}: hayagriva rejected our YAML: {e:?}\n{yaml}"));
         let keys = written_keys(&refs);
@@ -81,7 +81,7 @@ fn hayagriva_reads_our_yaml() {
 fn biblatex_reads_our_biblatex() {
     let mut checked = 0;
     for (rel, refs, _) in fixtures() {
-        let tex = write(&refs, Format::Biblatex).unwrap();
+        let tex = write(&refs, Format::Biblatex).unwrap().text;
         let bib = biblatex::Bibliography::parse(&tex)
             .unwrap_or_else(|e| panic!("{rel}: biblatex rejected our BibLaTeX: {e:?}\n{tex}"));
         let keys = written_keys(&refs);

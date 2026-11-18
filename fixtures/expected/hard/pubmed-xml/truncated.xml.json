@@ -6,6 +6,7 @@
       "code": "xml.unclosed",
       "line": 4,
       "record": null,
+      "field": null,
       "message": "The file ends with <PubmedArticleSet> <PubmedArticle> <MedlineCitation> <Article> <ArticleTitle> still open; it may be cut off"
     }
   ],

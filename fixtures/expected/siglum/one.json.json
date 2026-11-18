@@ -6,6 +6,7 @@
       "code": "csl.no-type",
       "line": 1,
       "record": 0,
+      "field": null,
       "message": "Item a has no type; wrote it as \"document\""
     }
   ],

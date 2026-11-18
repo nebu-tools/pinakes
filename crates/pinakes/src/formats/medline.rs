@@ -263,7 +263,7 @@ mod tests {
 
     #[test]
     fn reads_a_record() {
-        let src = "PMID- 31000002\nOWN - NLM\nTI  - Tidal pools as nurseries: a long title that\n      wraps onto a second line.\nLID - S0000-0000(19)30001-1 [pii]\nLID - 10.5555/tide.2019.2 [doi]\nAB  - Tide pools.\nFAU - Ekdahl, Maja\nAU  - Ekdahl M\nCN  - Coastal Survey Team\nDP  - 2019 Jul-Aug\nJT  - Marine ecology\nTA  - Mar Ecol\nPG  - 220-31\nPT  - Journal Article\nPMC - PMC6000002\nIS  - 0000-0019 (Linking)\n\nPMID- 31000003\nTI  - Second.\nAU  - Smith JA\n";
+        let src = "PMID- 31000002\nOWN - NLM\nTI  - Tidal pools as nurseries: a long title that\n      wraps onto a second line.\nLID - S0000-0000(19)30001-1 [pii]\nLID - 10.5555/tide.2019.2 [doi]\nAB  - Tide pools.\nFAU - Ekdahl, Maja\nAU  - Ekdahl M\nCN  - Coastal Survey Group\nDP  - 2019 Jul-Aug\nJT  - Marine ecology\nTA  - Mar Ecol\nPG  - 220-31\nPT  - Journal Article\nPMC - PMC6000002\nIS  - 0000-0019 (Linking)\n\nPMID- 31000003\nTI  - Second.\nAU  - Smith JA\n";
         let mut d = Vec::new();
         let refs = read(src, &mut d);
         assert_eq!(refs.len(), 2, "{d:?}");
@@ -275,7 +275,7 @@ mod tests {
         assert_eq!(r.doi.as_deref(), Some("10.5555/tide.2019.2"));
         assert_eq!(r.author.len(), 2);
         assert_eq!(r.author[0].given.as_deref(), Some("Maja"));
-        assert_eq!(r.author[1].literal.as_deref(), Some("Coastal Survey Team"));
+        assert_eq!(r.author[1].literal.as_deref(), Some("Coastal Survey Group"));
         assert_eq!(r.issued.as_ref().unwrap().start.unwrap().month, Some(7));
         assert!(r
             .source_fields

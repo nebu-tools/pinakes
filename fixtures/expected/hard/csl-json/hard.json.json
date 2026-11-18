@@ -6,6 +6,7 @@
       "code": "csl.wrong-type",
       "line": 34,
       "record": 3,
+      "field": null,
       "message": "Item weird: \"title\" should be a string; kept it unread"
     },
     {
@@ -13,6 +14,7 @@
       "code": "csl.wrong-type",
       "line": 34,
       "record": 3,
+      "field": null,
       "message": "Item weird: \"author\" should be a list of names; read it as one name"
     },
     {
@@ -20,6 +22,7 @@
       "code": "record.no-title",
       "line": 34,
       "record": 3,
+      "field": null,
       "message": "Record weird has no title"
     },
     {
@@ -27,6 +30,7 @@
       "code": "csl.not-an-object",
       "line": 40,
       "record": 4,
+      "field": null,
       "message": "Item 5 is not a JSON object; skipped it"
     }
   ],

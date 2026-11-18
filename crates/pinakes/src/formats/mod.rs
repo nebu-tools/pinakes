@@ -246,16 +246,24 @@ pub(crate) fn read_text(format: Format, text: &str, diags: &mut Vec<Diagnostic>)
     }
 }
 
-/// Write references, or `None` for a format Pinakes only reads.
-pub(crate) fn write_text(format: Format, refs: &[Reference]) -> Option<String> {
-    Some(match format {
-        Format::Ris => ris::write(refs),
-        Format::Bibtex => bibtex::write(refs, false),
-        Format::Biblatex => bibtex::write(refs, true),
+/// Write references, or `None` for a format Pinakes only reads. Each writer reports the
+/// losses it knows of; for a format Pinakes also reads, the output is then read back and every
+/// other difference reported too.
+pub(crate) fn write_text(
+    format: Format,
+    refs: &[Reference],
+    diags: &mut Vec<Diagnostic>,
+) -> Option<String> {
+    let text = match format {
+        Format::Ris => ris::write(refs, diags),
+        Format::Bibtex => bibtex::write(refs, false, diags),
+        Format::Biblatex => bibtex::write(refs, true, diags),
         Format::CslJson => csl::write(refs),
-        Format::Hayagriva => hayagriva::write(refs),
+        Format::Hayagriva => return Some(hayagriva::write(refs, diags)),
         _ => return None,
-    })
+    };
+    crate::check::read_back(format, refs, &text, diags);
+    Some(text)
 }
 
 #[cfg(test)]

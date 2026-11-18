@@ -42,24 +42,63 @@ Zotero and Pandoc write it, and its field names have one documented meaning.
   RIS `M1` or a BibTeX `owner`, in source order and with repeats. A writer for the same format
   writes them back. Other writers drop them, because no other format has a place for them.
 
-Writers lose only what the target format cannot hold, and no value breaks a writer's framing.
-`crates/pinakes/tests/writers.rs` checks both with proptest. Any reference, with any text in
+Writers lose only what the target format cannot hold, and they say what they lost. Each
+writer returns its text with a diagnostic for every value it left out, changed, shortened or
+moved to another field, naming the record and the field (see [Write](#write)). No value breaks
+a writer's framing.
+
+`crates/pinakes/tests/writers.rs` checks this with proptest. Any reference, with any text in
 any field (braces, `@`, `ER  - ` lines, backslashes, control characters), writes as exactly
 one record that reads back without an error, and Hayagriva's own parser accepts the YAML. A
 reference in normal form (as `normalise` leaves it) reads back with every text field the
-format holds unchanged, except for these, which the formats cannot hold:
+format holds unchanged, except for those in the table. And for any two references, with
+unknown CSL-JSON members beside the typed ones, every member that reads back different from
+any writer's output is named by a diagnostic with its record and field
+(`every_loss_is_reported`, 256 cases in CI).
 
-| Format | Not held |
-| --- | --- |
-| RIS | Name parts. A name is one line, `Family, Given, Suffix`, and the reader reads it as exports write names (Vancouver initials, a trailing `;`). Every name survives, and a second pass gives the same names; a name of nothing but commas and semicolons is lost. A genre of up to eight digits is read back from `M3` as a PMID, as PubMed-derived exports mean it. |
-| BibTeX | A thesis with no genre: `@phdthesis` implies "PhD thesis". A particle is told from the family name only by its lower case. |
-| BibLaTeX | A particle, as in BibTeX. |
-| Hayagriva | Markup in titles and abstracts, and fields Hayagriva has no key for. |
-| CSL-JSON | Nothing. Any CSL-shaped object, with unknown members in the item, its names and its dates, reads and writes back as it came. |
+| Format | Not held | Diagnostic |
+| --- | --- | --- |
+| RIS | Name parts. A name is one line, `Family, Given, Suffix`, and the reader reads it as exports write names (Vancouver initials, a trailing `;`). Every name survives, and a second pass gives the same names; a name of nothing but commas and semicolons is lost. | `ris.changed`, field `author` or `editor` |
+| RIS | A genre of up to eight digits is read back from `M3` as a PMID, as PubMed-derived exports mean it. | `ris.changed` for `genre`, and for `PMID` when the record had none |
+| RIS | A name that is the truncation marker when read back: an organisation named `et al.`, a person whose family name is `others` and who has no given name. RIS has one way to write "and others" and no way to tell it from these. | `ris.et-al` |
+| RIS | Fields with no RIS tag: CSL-JSON members Pinakes does not model, `custom` members other than the database and accession number, and source fields from other formats. | `ris.left-out` |
+| BibTeX | A thesis with no genre: `@phdthesis` implies "PhD thesis". | `bibtex.changed`, field `genre` |
+| BibTeX, BibLaTeX | A particle is told from the family name only by its lower case. | `bibtex.changed`, field `author` or `editor` |
+| BibTeX, BibLaTeX | A verbatim value (URL, DOI, identifiers, `eprint`, verbatim source fields) that the syntax cannot hold as it is. See below. | `bibtex.verbatim-encoded` or `bibtex.verbatim-changed` |
+| BibTeX, BibLaTeX | Fields with no BibTeX field: unknown CSL-JSON members, and source fields from other formats. | `bibtex.left-out` |
+| Hayagriva | Markup in titles, abstracts and container titles. | `hayagriva.markup` |
+| Hayagriva | A CSL type with no Hayagriva type of its own. | `hayagriva.type` |
+| Hayagriva | Name parts Hayagriva has no place for (a dropping particle, unknown members, a literal beside parts), and the "and others" marker. | `hayagriva.name` |
+| Hayagriva | A date Hayagriva cannot hold (a range, a literal, a year outside 0 to 9999), and a citation key that had to change to be unique and plain. | `hayagriva.changed` |
+| Hayagriva | Fields with no Hayagriva key: short titles, keywords, unknown members, `custom` members, an access date without a URL, a parent's fields when there is no parent title. | `hayagriva.left-out` |
+| CSL-JSON | Nothing. Any CSL-shaped object, with unknown members in the item, its names and its dates, reads and writes back as it came. | None needed; the check below would give `csl.changed` or `csl.left-out` |
+
+Every writer of a format Pinakes also reads (RIS, BibTeX, BibLaTeX, CSL-JSON) reads its own
+output back and compares each record, member by member in CSL-JSON terms, with the record in
+normal form. A member that differs or is gone, and that no diagnostic names yet, gets
+`<format>.changed` or `<format>.left-out`. So the table above is the known list, and a loss
+nobody listed is still reported. Three things are not compared: `id`, which is the record's
+place in its source; a citation key the record did not have, which the writer made up; and
+blank values (empty or white space), here or inside a name or date, which are the same as
+none. RIS keeps a citation key on its `ID` line, which reads back as the `id`; that counts as
+kept.
+A diagnostic the writer gives for a field stands for every difference in that field, so a
+second loss in a field already reported is not reported again. Hayagriva has no reader in
+Pinakes, so its diagnostics come only from the writer's own list. Reading the output back
+roughly doubles the cost of a write.
 
 BibTeX holds line and paragraph breaks as `\newline` and `\par`. Through CSL-JSON every
 record from every fixture comes back unchanged, unknown fields included
 (`crates/pinakes/tests/robustness.rs`).
+
+Verbatim values in BibTeX and BibLaTeX are written exactly as they are wherever the syntax can
+hold them: a value is held when its braces balance, it does not end in a lone backslash, and no
+line of it starts with `@` outside braces. Where it cannot be held, a URL or a DOI has only the
+characters that break the syntax percent-encoded (`}` as `%7D`), with
+`bibtex.verbatim-encoded`. Any other verbatim field has those characters removed, which is the
+nearest value that keeps the file well-formed, with `bibtex.verbatim-changed`. A byte-order
+mark or NUL inside a value is removed the same way. The reader never decodes percent escapes:
+`%7D` in a file is read as `%7D`.
 
 ## Entry points
 
@@ -68,7 +107,7 @@ naming.
 
 ```rust
 pub fn read(bytes: &[u8], format: Option<Format>) -> Library;
-pub fn write(refs: &[Reference], format: Format) -> Result<String, ReadOnlyFormat>;
+pub fn write(refs: &[Reference], format: Format) -> Result<Written, ReadOnlyFormat>;
 pub fn normalise(r: &mut Reference) -> Vec<Diagnostic>;
 pub fn assign_keys(refs: &mut [Reference], replace: bool);
 pub fn find_duplicates(refs: &[Reference]) -> Duplicates;
@@ -136,8 +175,13 @@ does before it makes references:
 
 ### Write
 
-`write` returns the text of a file. A format that Pinakes reads but does not write returns
-`ReadOnlyFormat`. A record without a citation key gets one from `key_for` in the formats that
+`write` returns a `Written`: the text of a file, and diagnostics for what the format could
+not hold as it was. They are the same `Diagnostic`s the readers give, all warnings except
+`<format>.records` (the output does not read back as the same number of records, which would
+be a bug). Each has `record` and `field` set, and its message says what happened: what was left
+out, or what was written and what it reads back as. In the CLI, `convert` prints them on
+standard error, and `--strict` makes any of them a failure exit. A format that Pinakes reads
+but does not write returns `ReadOnlyFormat`. A record without a citation key gets one from `key_for` in the formats that
 need keys (BibTeX, BibLaTeX and Hayagriva). The record itself is not changed.
 
 ### Normalise
@@ -154,6 +198,11 @@ references that the caller makes or edits.
 | ISBN | 13 digits | ISBN-10 or ISBN-13, with hyphens or spaces; the check digit must be correct |
 | ISSN | `1234-5679` | with or without the hyphen; the check digit must be correct |
 | arXiv | `2101.00001v2` or `hep-th/9901001` | `arXiv:` prefixes and `arxiv.org/abs/` URLs |
+
+Text fields are tidied without a diagnostic. Control characters and byte-order marks are
+removed, runs of white space (line breaks included) become one space, the ends are trimmed, and
+the text is put in Unicode NFC. An abstract or a note keeps its line breaks and paragraphs.
+The same applies to each part of a name and to a date's literal form.
 
 An identifier that cannot be read is kept in the record as it was. It gets an `id.invalid-…`
 warning, and duplicate finding ignores it. Page ranges become `301-310`, from `301--310`,
@@ -246,7 +295,7 @@ Readers never panic, and they never drop input without saying so. Every problem 
 `Diagnostic`:
 
 ```json
-{"severity": "error", "code": "ris.stray-text", "message": "Text outside any record was not read: \"…\"", "line": 6, "record": null}
+{"severity": "error", "code": "ris.stray-text", "message": "Text outside any record was not read: \"…\"", "line": 6, "record": null, "field": null}
 ```
 
 - **severity**: `error` means some input was not read, or not read as its writer meant: text
@@ -258,6 +307,8 @@ Readers never panic, and they never drop input without saying so. Every problem 
   Callers match on the code, not the message.
 - **line** is the 1-based line in the decoded input, when the format has lines.
 - **record** is the index of the reference that the diagnostic belongs to, when there is one.
+- **field** is the field it is about, when there is one: the source field for a reader
+  (`title`, `TI`), the CSL-JSON member for a writer (`URL`, `custom.source-fields`).
 
 `Library::has_errors` tells the caller whether anything was skipped. The CLI exits with
 status 1 when it was.
@@ -279,7 +330,8 @@ These check it:
 Nesting is bounded everywhere. XML elements nest at most 256 deep; deeper tags are dropped
 and their text kept, with `xml.too-deep`. JSON nests at most 128 deep, serde_json's limit,
 and a deeper file is the error `csl.bad-json`. LaTeX command arguments are converted at most
-64 deep, and deeper ones are kept as their text. Each level copies its argument once, so the
+64 deep. A deeper argument is kept as it was written, braces and commands included, and the
+reader gives `bibtex.too-deep` with the field and its line. Each level copies its argument once, so the
 time is at most 64 times the length. Everything else is read with loops, not recursion.
 
 ## WebAssembly and Python

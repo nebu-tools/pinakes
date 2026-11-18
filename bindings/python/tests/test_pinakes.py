@@ -39,18 +39,31 @@ def test_bad_input_gives_diagnostics_with_lines():
 
 def test_write_every_writable_format():
     refs = pinakes.read(RIS)["references"]
-    assert pinakes.write(refs, "biblatex").startswith("@article{adeyemi2019moths,")
-    assert pinakes.write(refs, "ris").startswith("TY  - JOUR\n")
-    assert pinakes.write(refs, "hayagriva").startswith("adeyemi2019moths:\n")
-    assert json.loads(pinakes.write(refs, "csl-json")) == refs
-    assert "{10.5555/x}" in pinakes.write(refs[0], "bibtex")
+    out = pinakes.write(refs, "biblatex")
+    assert out["text"].startswith("@article{adeyemi2019moths,")
+    assert out["diagnostics"] == []
+    assert pinakes.write(refs, "ris")["text"].startswith("TY  - JOUR\n")
+    assert pinakes.write(refs, "hayagriva")["text"].startswith("adeyemi2019moths:\n")
+    assert json.loads(pinakes.write(refs, "csl-json")["text"]) == refs
+    assert "{10.5555/x}" in pinakes.write(refs[0], "bibtex")["text"]
     with pytest.raises(ValueError, match="does not write"):
         pinakes.write(refs, "medline")
 
 
+def test_write_reports_what_the_format_cannot_hold():
+    item = {"id": "x", "type": "book", "title": "Tides", "x-shelf": "B4", "URL": "https://a.org/a}b"}
+    out = pinakes.write(item, "ris")
+    [d] = [d for d in out["diagnostics"] if d["field"] == "x-shelf"]
+    assert (d["severity"], d["code"], d["record"]) == ("warning", "ris.left-out", 0)
+    out = pinakes.write(item, "biblatex")
+    [d] = [d for d in out["diagnostics"] if d["field"] == "URL"]
+    assert d["code"] == "bibtex.verbatim-encoded"
+    assert "= {https://a.org/a%7Db}," in out["text"]
+
+
 def test_unknown_fields_survive():
     item = {"id": "x", "type": "book", "title": "Tides", "x-shelf": "B4", "custom": {"my-flag": True}}
-    [back] = pinakes.read(pinakes.write([item], "csl-json"))["references"]
+    [back] = pinakes.read(pinakes.write([item], "csl-json")["text"])["references"]
     assert back["x-shelf"] == "B4"
     assert back["custom"]["my-flag"] is True
 
@@ -91,9 +104,9 @@ def test_name_and_date_members_and_others_survive():
         "issued": {"date-parts": [[2020]], "season": 2},
     }
     for fmt in ["csl-json", "bibtex"]:
-        back = pinakes.read(pinakes.write([item], fmt))["references"][0]
+        back = pinakes.read(pinakes.write([item], fmt)["text"])["references"][0]
         assert back["author"][-1] == {"literal": "others"}, fmt
-    back = pinakes.read(pinakes.write([item], "csl-json"))["references"][0]
+    back = pinakes.read(pinakes.write([item], "csl-json")["text"])["references"][0]
     assert back["author"][0]["static-ordering"] is True
     assert back["issued"]["season"] == 2
 

@@ -200,7 +200,7 @@ fn nisaba_ris() {
         "T2"
     );
     assert_eq!(r.note.as_deref(), Some("database search: MEDLINE"), "N1");
-    let out = write(&lib.references, Format::Ris).unwrap();
+    let out = write(&lib.references, Format::Ris).unwrap().text;
     assert!(
         out.contains("QZ  - vendor-required\n"),
         "unknown tags are written back:\n{out}"
@@ -286,7 +286,7 @@ fn nisaba_hayagriva() {
         "TY  - JOUR\nTI  - Moths: \"quoted\"\nAU  - Lind, K\nPY  - 2020\nER  - \n",
         None,
     );
-    let yaml = write(&lib.references, Format::Hayagriva).unwrap();
+    let yaml = write(&lib.references, Format::Hayagriva).unwrap().text;
     assert!(yaml.starts_with("lind2020moths:\n"), "{yaml}");
     assert!(yaml.contains("title: \"Moths: \\\"quoted\\\"\""), "{yaml}");
 }

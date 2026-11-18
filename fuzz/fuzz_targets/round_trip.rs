@@ -17,7 +17,7 @@ fuzz_target!(|data: &[u8]| {
         .into_iter()
         .filter(|f| f.can_write() && f.can_read())
     {
-        let out = pinakes::write(&lib.references, to).unwrap();
+        let out = pinakes::write(&lib.references, to).unwrap().text;
         let back = pinakes::read(out.as_bytes(), Some(to));
         assert_eq!(
             back.references.len(),

@@ -1080,6 +1080,23 @@ fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Referenc
         }
     }
     let used: Vec<String> = used.into_iter().map(str::to_string).collect();
+    for name in &used {
+        let deep = !VERBATIM.contains(&name.as_str())
+            && get.get(name).is_some_and(|v| super::latex::too_deep(v));
+        if deep {
+            diags.push(
+                Diagnostic::warning(
+                    "bibtex.too-deep",
+                    format!(
+                        "Field {name} nests braces deeper than the LaTeX converter goes; kept the deepest part as written, unconverted"
+                    ),
+                )
+                .at(seen.get(name).copied().unwrap_or(e.line))
+                .record(index)
+                .field(name.clone()),
+            );
+        }
+    }
     for name in order {
         if used.contains(&name) {
             continue;
@@ -1253,17 +1270,57 @@ fn bib_word(w: &str, fallback: &str) -> String {
     }
 }
 
-/// A verbatim value (URL, DOI, identifier): kept as written when the lexer reads it back
-/// whole, otherwise its braces and backslashes are percent-encoded, as in a URL.
-fn verbatim_value(v: &str) -> String {
-    let v = v.replace(['\n', '\r'], " ").replace(['\u{feff}', '\0'], "");
-    if frames(&v) {
-        return v;
+/// A verbatim value (URL, DOI, identifier) as the lexer reads it back: exactly as given when
+/// it can, which is whenever its braces match, it does not end in a lone backslash and no line
+/// of it starts with `@`. Otherwise the characters that break the value are percent-encoded in
+/// a URL or DOI (`url_like`), as a URL would have them, and dropped from anything else. The
+/// second value says which of the two happened, if either did.
+fn verbatim_value(v: &str, url_like: bool) -> (String, Option<&'static str>) {
+    // Reading drops byte-order marks and NULs, so no value can hold them.
+    let clean = v.replace(['\u{feff}', '\0'], "");
+    if frames(&clean) {
+        let code = (clean != v).then_some("bibtex.verbatim-changed");
+        return (clean, code);
     }
-    v.replace('%', "%25")
-        .replace('\\', "%5C")
-        .replace('{', "%7B")
-        .replace('}', "%7D")
+    let b = clean.as_bytes();
+    let mut breaks = vec![false; b.len()];
+    let mut open: Vec<usize> = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\\' if i + 1 == b.len() => breaks[i] = true,
+            b'\\' => {
+                i += 2;
+                continue;
+            }
+            b'{' => open.push(i),
+            b'}' => {
+                if open.pop().is_none() {
+                    breaks[i] = true;
+                }
+            }
+            b'@' if open.is_empty() && i > 0 && b[i - 1] == b'\n' => breaks[i] = true,
+            _ => {}
+        }
+        i += 1;
+    }
+    for j in open {
+        breaks[j] = true;
+    }
+    let mut out = String::with_capacity(clean.len() + 8);
+    for (j, c) in clean.char_indices() {
+        if !breaks[j] {
+            out.push(c);
+        } else if url_like {
+            out.push_str(&format!("%{:02X}", c as u32));
+        }
+    }
+    let code = if url_like {
+        "bibtex.verbatim-encoded"
+    } else {
+        "bibtex.verbatim-changed"
+    };
+    (out, Some(code))
 }
 
 /// Whether `{v}` reads back as `v`: the lexer's own brace and escape rules.
@@ -1317,11 +1374,35 @@ fn frame(v: &str) -> String {
 
 /// Write BibTeX (`biblatex == false`: classic field names, LaTeX accents for anything outside
 /// ASCII) or BibLaTeX (`journaltitle`, `date`, `location`, Unicode kept).
-pub fn write(refs: &[Reference], biblatex: bool) -> String {
+pub fn write(refs: &[Reference], biblatex: bool, diags: &mut Vec<Diagnostic>) -> String {
     let keys = crate::key::keys_for_writing(refs);
     let ascii = !biblatex;
     let mut out = String::new();
-    for (r, key) in refs.iter().zip(keys) {
+    for (i, (r, key)) in refs.iter().zip(keys).enumerate() {
+        let label = crate::check::label(r, i);
+        let mut verbatim = |field: &str, value: &str, url_like: bool| -> String {
+            let (written, code) = verbatim_value(value, url_like);
+            if let Some(code) = code {
+                let what = if code == "bibtex.verbatim-encoded" {
+                    "percent-encoded the characters that would end it early"
+                } else {
+                    "left out the characters that would end it early"
+                };
+                diags.push(
+                    Diagnostic::warning(
+                        code,
+                        format!(
+                            "{label}: {field} {} cannot be written as it is; {what}, writing {}",
+                            crate::check::show(&serde_json::Value::String(value.to_string())),
+                            crate::check::show(&serde_json::Value::String(written.clone())),
+                        ),
+                    )
+                    .record(i)
+                    .field(field),
+                );
+            }
+            written
+        };
         let masters = r
             .genre
             .as_deref()
@@ -1473,44 +1554,38 @@ pub fn write(refs: &[Reference], biblatex: bool) -> String {
         if let Some(a) = r.accessed.as_ref().and_then(|d| d.iso()) {
             fields.push(("urldate".into(), a, false));
         }
-        let mut add = |name: &str, value: String| {
-            if !value.trim().is_empty() {
-                fields.push((name.to_string(), verbatim_value(&value), false));
+        // (BibTeX name, CSL name, value, whether it is a URL or DOI)
+        let identifiers = [
+            ("doi", "DOI", &r.doi, true),
+            ("url", "URL", &r.url, true),
+            ("isbn", "ISBN", &r.isbn, false),
+            ("issn", "ISSN", &r.issn, false),
+            ("pmid", "PMID", &r.pmid, false),
+            ("pmcid", "PMCID", &r.pmcid, false),
+        ];
+        for (name, field, value, url_like) in identifiers {
+            if let Some(v) = value.as_deref().filter(|v| !v.trim().is_empty()) {
+                let written = verbatim(field, v, url_like);
+                fields.push((name.to_string(), written, false));
             }
-        };
-        if let Some(v) = &r.doi {
-            add("doi", v.clone());
-        }
-        if let Some(v) = &r.url {
-            add("url", v.clone());
-        }
-        if let Some(v) = &r.isbn {
-            add("isbn", v.clone());
-        }
-        if let Some(v) = &r.issn {
-            add("issn", v.clone());
-        }
-        if let Some(v) = &r.pmid {
-            add("pmid", v.clone());
-        }
-        if let Some(v) = &r.pmcid {
-            add("pmcid", v.clone());
         }
         let has_eprint = r.source_fields_of(FORMAT).any(|f| f.name == "eprint");
-        if let (Some(a), false) = (&r.arxiv, has_eprint) {
-            add("eprint", a.clone());
-            add(
+        if let (Some(a), false) = (
+            r.arxiv.as_deref().filter(|a| !a.trim().is_empty()),
+            has_eprint,
+        ) {
+            let written = verbatim("custom.arxiv", a, false);
+            fields.push(("eprint".into(), written, false));
+            fields.push((
                 if biblatex {
                     "eprinttype"
                 } else {
                     "archiveprefix"
-                },
-                if biblatex {
-                    "arxiv".into()
-                } else {
-                    "arXiv".into()
-                },
-            );
+                }
+                .into(),
+                if biblatex { "arxiv" } else { "arXiv" }.into(),
+                false,
+            ));
         }
         let mut add = |name: &str, value: String| {
             if !value.trim().is_empty() {
@@ -1553,7 +1628,11 @@ pub fn write(refs: &[Reference], biblatex: bool) -> String {
                 continue;
             }
             let value = if VERBATIM.contains(&name.as_str()) {
-                verbatim_value(&f.value)
+                verbatim(
+                    "custom.source-fields",
+                    &f.value,
+                    matches!(name.as_str(), "url" | "urlraw" | "doi"),
+                )
             } else {
                 frame(&f.value)
             };
@@ -1652,7 +1731,7 @@ mod tests {
         assert_eq!(r.issued.as_ref().unwrap().start.unwrap().month, Some(3));
         assert_eq!(r.author.len(), 3);
         assert_eq!(r.author[2], Name::others());
-        let out = write(&refs, false);
+        let out = write(&refs, false, &mut Vec::new());
         assert!(out.contains("Roe, R. and others}"), "{out}");
         assert_eq!(read_str(&out).0[0].author, r.author);
         assert_eq!(r.citation_key.as_deref(), Some("k1"));
@@ -1678,7 +1757,7 @@ mod tests {
     fn unknown_fields_round_trip() {
         let src = "@article{k,\n  title = {A},\n  owner = {someone},\n  file = {:a.pdf:PDF},\n}\n";
         let (refs, _) = read_str(src);
-        let out = write(&refs, false);
+        let out = write(&refs, false, &mut Vec::new());
         assert!(out.contains("owner") && out.contains(":a.pdf:PDF"), "{out}");
         let (again, _) = read_str(&out);
         assert_eq!(again, refs);
@@ -1697,12 +1776,12 @@ mod tests {
     #[test]
     fn writes_bibtex_and_biblatex() {
         let (refs, _) = read_str("@article{k, title={The DNA of Moths}, author={M{\\\"u}ller, Anna}, journal={Ecology}, year={2020}, month={5}, pages={301--310}}");
-        let bib = write(&refs, false);
+        let bib = write(&refs, false, &mut Vec::new());
         assert!(bib.contains("title   = {The {DNA} of Moths}"), "{bib}");
         assert!(bib.contains("M{\\\"u}ller, Anna"), "{bib}");
         assert!(bib.contains("month   = may"), "{bib}");
         assert!(bib.contains("pages   = {301--310}"), "{bib}");
-        let blx = write(&refs, true);
+        let blx = write(&refs, true, &mut Vec::new());
         assert!(blx.contains("journaltitle = {Ecology}"), "{blx}");
         assert!(blx.contains("date         = {2020-05}"), "{blx}");
         assert!(blx.contains("Müller, Anna"), "{blx}");
@@ -1732,7 +1811,7 @@ mod tests {
         r.author = vec![Name::person("and", Some("Smith, John"))];
         r.keep(FORMAT, "Odd Name}", "x}\n@misc{q,");
         for biblatex in [false, true] {
-            let out = write(std::slice::from_ref(&r), biblatex);
+            let out = write(std::slice::from_ref(&r), biblatex, &mut Vec::new());
             let (back, diags) = read_str(&out);
             assert_eq!(back.len(), 1, "{out}\n{diags:?}");
             assert!(

@@ -6,6 +6,7 @@
       "code": "ris.stray-er",
       "line": 7,
       "record": null,
+      "field": null,
       "message": "ER with no record open; ignored it"
     },
     {
@@ -13,6 +14,7 @@
       "code": "ris.stray-text",
       "line": 1,
       "record": null,
+      "field": null,
       "message": "Text outside any record was not read: \"Some text an email client put above the export.\""
     },
     {
@@ -20,6 +22,7 @@
       "code": "ris.stray-text",
       "line": 6,
       "record": null,
+      "field": null,
       "message": "Text outside any record was not read: \"this line belongs to nothing\""
     }
   ],

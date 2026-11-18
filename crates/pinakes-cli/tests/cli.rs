@@ -36,6 +36,27 @@ fn convert_reads_stdin_and_writes_keys() {
 }
 
 #[test]
+fn convert_reports_what_the_output_cannot_hold_and_strict_fails() {
+    // RIS has no place for a BibTeX source field, and reads an organisation named "et al." as
+    // the marker for names left out.
+    let bib = "@article{k,\n  title = {Moths},\n  author = {{et al.}},\n  owner = {ada},\n}\n";
+    let out = pinakes(&["convert", "--to", "ris"], bib);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let err = text(&out.stderr);
+    assert!(err.contains("<stdout>: warning ris.et-al:"), "{err}");
+    assert!(err.contains("warning ris.left-out:"), "{err}");
+    assert!(err.contains("custom.source-fields"), "{err}");
+
+    let out = pinakes(&["convert", "--to", "ris", "--strict"], bib);
+    assert_eq!(out.status.code(), Some(1));
+    assert!(out.stdout.starts_with(b"TY  - JOUR"));
+
+    let out = pinakes(&["convert", "--to", "biblatex", "--strict"], RIS);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    assert_eq!(text(&out.stderr), "");
+}
+
+#[test]
 fn convert_joins_files_and_refuses_read_only_formats() {
     let out = pinakes(
         &[
