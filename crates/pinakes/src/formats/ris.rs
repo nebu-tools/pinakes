@@ -143,8 +143,11 @@ fn records(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<RawRecord> {
                 let piece = line.trim();
                 let piece = piece.strip_prefix("- ").unwrap_or(piece);
                 if !value.is_empty() {
-                    if joins_with_newline(tag)
-                        && (blank_pending || line.starts_with(|c: char| !c.is_whitespace()))
+                    if joins_with_newline(tag) && blank_pending {
+                        // A blank line between lines of an abstract or note: a new paragraph.
+                        value.push_str("\n\n");
+                    } else if joins_with_newline(tag)
+                        && line.starts_with(|c: char| !c.is_whitespace())
                     {
                         value.push('\n');
                     } else {
@@ -650,12 +653,19 @@ fn push(out: &mut String, tag: &str, value: &str) {
     out.push_str("  - ");
     out.push_str(first.trim_end());
     out.push('\n');
+    // A paragraph break becomes one blank line, which `read` turns back into a break.
+    let mut blank = false;
     for more in lines {
         let more = more.trim();
-        if !more.is_empty() {
-            out.push_str(more);
+        if more.is_empty() {
+            blank = true;
+            continue;
+        }
+        if std::mem::take(&mut blank) {
             out.push('\n');
         }
+        out.push_str(more);
+        out.push('\n');
     }
 }
 
@@ -864,6 +874,18 @@ mod tests {
             refs[0].abstract_text.as_deref(),
             Some("First paragraph.\nSecond paragraph.")
         );
+    }
+
+    #[test]
+    fn paragraphs_survive_a_round_trip() {
+        let r = Reference {
+            abstract_text: Some("One.\n\nTwo.\nThree.".into()),
+            ..Reference::default()
+        };
+        let text = write(std::slice::from_ref(&r));
+        assert!(text.contains("AB  - One.\n\nTwo.\nThree.\n"), "{text}");
+        let (back, _) = read_str(&text);
+        assert_eq!(back[0].abstract_text, r.abstract_text);
     }
 
     #[test]
