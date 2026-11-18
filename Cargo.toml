@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/pinakes", "crates/pinakes-cli", "bindings/wasm"]
+members = ["crates/pinakes", "crates/pinakes-cli", "bindings/wasm", "bindings/python"]
 default-members = ["crates/pinakes", "crates/pinakes-cli"]
 
 [workspace.package]
