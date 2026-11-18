@@ -64,7 +64,7 @@ pub fn normalise(r: &mut Reference) -> Vec<Diagnostic> {
         if r.pmcid
             .as_deref()
             .and_then(id::pmcid)
-            .map_or(true, |have| have == p)
+            .is_none_or(|have| have == p)
         {
             diags.push(Diagnostic::warning(
                 "id.pmcid-as-pmid",

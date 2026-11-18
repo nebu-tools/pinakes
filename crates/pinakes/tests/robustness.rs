@@ -9,10 +9,10 @@ fn fixtures() -> Vec<PathBuf> {
         for e in std::fs::read_dir(dir).unwrap() {
             let p = e.unwrap().path();
             if p.is_dir() {
-                if !p.ends_with("expected") {
+                if !p.ends_with("expected") && !p.ends_with("generated") {
                     walk(&p, out);
                 }
-            } else if p.extension().map_or(true, |x| x != "md") {
+            } else if p.extension().is_none_or(|x| x != "md") {
                 out.push(p);
             }
         }
