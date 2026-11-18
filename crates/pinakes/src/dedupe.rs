@@ -972,28 +972,80 @@ mod tests {
 
     #[test]
     fn blocking_finds_what_exhaustive_finds() {
-        let mut refs = Vec::new();
-        for i in 0..(EXHAUSTIVE_LIMIT + 50) {
-            refs.push(rec(
-                &format!(
-                    "Survey number {i} of the nocturnal moths of region {}",
-                    i * 7919 % 10007
-                ),
-                Some(1990 + (i % 30) as i32),
-                &format!("Author{}", i % 97),
-            ));
+        // Records from a small vocabulary, so titles share many words, and copies changed the
+        // ways exports change them: a typo, a word dropped or moved, case and punctuation, the
+        // year one off, the author missing.
+        let mut seed = 0x2545_f491_4f6c_dd1du64;
+        let mut next = move |n: usize| {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            (seed % n as u64) as usize
+        };
+        let vocab: Vec<String> = (0..300)
+            .map(|i| format!("w{}x{}", i * 37 % 300, i % 7))
+            .collect();
+        let mut refs: Vec<Reference> = (0..EXHAUSTIVE_LIMIT + 100)
+            .map(|_| {
+                let words: Vec<&str> = (0..8 + next(5))
+                    .map(|_| vocab[next(300)].as_str())
+                    .collect();
+                rec(
+                    &words.join(" "),
+                    Some(1990 + next(35) as i32),
+                    &format!("Family{}", next(60)),
+                )
+            })
+            .collect();
+        for k in 0..200 {
+            let src = refs[next(EXHAUSTIVE_LIMIT)].clone();
+            let mut words: Vec<String> = src
+                .title
+                .as_deref()
+                .unwrap()
+                .split(' ')
+                .map(String::from)
+                .collect();
+            match k % 6 {
+                0 => {
+                    let w = next(words.len());
+                    words[w].replace_range(0..1, "q");
+                }
+                1 => {
+                    words.remove(next(words.len()));
+                }
+                2 => {
+                    let (a, b) = (next(words.len()), next(words.len()));
+                    words.swap(a, b);
+                }
+                3 => words[0] = words[0].to_uppercase() + ":",
+                _ => {}
+            }
+            let mut copy = rec(&words.join(" "), src.year(), "");
+            if k % 6 == 4 {
+                copy.issued = src.year().map(|y| Date::year(y + 1));
+            }
+            if k % 6 != 5 {
+                copy.author = src.author.clone();
+            }
+            refs.push(copy);
         }
-        refs.push(rec(
-            "Survey number 5 of the nocturnal moths of region 39595",
-            Some(1995),
-            "Author5",
-        ));
-        refs[5].title = Some("Survey number 5 of the nocturnal moths of region 39595".into());
-        let d = find_duplicates(&refs);
-        assert!(
-            d.pairs.iter().any(|p| p.a == 5 && p.b == refs.len() - 1),
-            "{:?}",
-            d.pairs.len()
-        );
+        let facts: Vec<Facts> = refs.iter().map(facts).collect();
+        let blocked: HashSet<(usize, usize)> = pairs_to_compare(&facts).into_iter().collect();
+        let mut found = 0;
+        for i in 0..refs.len() {
+            for j in i + 1..refs.len() {
+                if compare(i, j, &facts[i], &facts[j]).is_some() {
+                    found += 1;
+                    assert!(
+                        blocked.contains(&(i, j)),
+                        "missed {i} {j}: {:?} / {:?}",
+                        refs[i].title,
+                        refs[j].title
+                    );
+                }
+            }
+        }
+        assert!(found > 150, "only {found} candidates");
     }
 }
