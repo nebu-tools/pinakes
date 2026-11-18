@@ -24,14 +24,14 @@ fn text(b: &[u8]) -> String {
 }
 
 const RIS: &str =
-    "TY  - JOUR\nTI  - Moths at dusk\nAU  - Okafor, Ada\nPY  - 2019\nDO  - 10.5555/X\nER  - \n";
+    "TY  - JOUR\nTI  - Moths at dusk\nAU  - Adeyemi, Ada\nPY  - 2019\nDO  - 10.5555/X\nER  - \n";
 
 #[test]
 fn convert_reads_stdin_and_writes_keys() {
     let out = pinakes(&["convert", "--to", "biblatex"], RIS);
     assert!(out.status.success(), "{}", text(&out.stderr));
     let bib = text(&out.stdout);
-    assert!(bib.starts_with("@article{okafor2019moths,"), "{bib}");
+    assert!(bib.starts_with("@article{adeyemi2019moths,"), "{bib}");
     assert!(bib.contains("= {10.5555/x},"), "{bib}");
 }
 

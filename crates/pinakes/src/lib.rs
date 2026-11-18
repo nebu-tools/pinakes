@@ -11,10 +11,10 @@
 //! - [`find_duplicates`] proposes records that are the same publication.
 //!
 //! ```
-//! let lib = pinakes::read(b"TY  - JOUR\nTI  - Moths\nAU  - Okafor, Ada\nPY  - 2019\nDO  - https://doi.org/10.5555/X\nER  - \n", None);
+//! let lib = pinakes::read(b"TY  - JOUR\nTI  - Moths\nAU  - Adeyemi, Ada\nPY  - 2019\nDO  - https://doi.org/10.5555/X\nER  - \n", None);
 //! assert_eq!(lib.references[0].doi.as_deref(), Some("10.5555/x"));
 //! let bib = pinakes::write(&lib.references, pinakes::Format::Biblatex).unwrap();
-//! assert!(bib.starts_with("@article{okafor2019moths,"));
+//! assert!(bib.starts_with("@article{adeyemi2019moths,"));
 //! ```
 
 mod dates;

@@ -108,7 +108,7 @@ pub fn is_initials(token: &str) -> bool {
     if !all_upper || !only_marks {
         return false;
     }
-    // "LU" or "JA" are initials; "Li" is a name.
+    // "LU" or "JA" are initials; "Xu" is a name.
     token.contains('.') || letters.len() <= 3
 }
 
@@ -234,7 +234,7 @@ pub fn parse_name(input: &str) -> Name {
     }
     let last = words[words.len() - 1];
     if is_initials(last) && !is_initials(words[0]) {
-        // Vancouver: "Smith JA", "van der Berg J", "Konstan M.W.".
+        // Vancouver: "Smith JA", "van der Berg J", "Marchetti M.W.".
         return person(&words[..words.len() - 1].join(" "), Some(last), None);
     }
     if words.iter().all(|w| {
@@ -332,15 +332,15 @@ mod tests {
 
     #[test]
     fn forms() {
-        assert_eq!(fam(&parse_name("Wainwright, CE")), ("Wainwright", "C. E."));
-        assert_eq!(fam(&parse_name("Konstan, M.W.")), ("Konstan", "M. W."));
-        assert_eq!(fam(&parse_name("Konstan M.W.")), ("Konstan", "M. W."));
+        assert_eq!(fam(&parse_name("Fairbairn, CE")), ("Fairbairn", "C. E."));
+        assert_eq!(fam(&parse_name("Marchetti, M.W.")), ("Marchetti", "M. W."));
+        assert_eq!(fam(&parse_name("Marchetti M.W.")), ("Marchetti", "M. W."));
         assert_eq!(fam(&parse_name("Smith JA")), ("Smith", "J. A."));
         assert_eq!(
             fam(&parse_name("Turner, Nicholas C.")),
             ("Turner", "Nicholas C.")
         );
-        assert_eq!(fam(&parse_name("Gabler")), ("Gabler", ""));
+        assert_eq!(fam(&parse_name("Quist")), ("Quist", ""));
         let n = parse_name("van der Berg, Jan");
         assert_eq!(
             (n.particle.as_deref(), fam(&n)),

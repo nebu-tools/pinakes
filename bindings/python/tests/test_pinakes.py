@@ -6,7 +6,7 @@ import pytest
 import pinakes
 
 FIXTURES = pathlib.Path(__file__).resolve().parents[3] / "fixtures"
-RIS = "TY  - JOUR\nTI  - Moths at dusk\nAU  - Okafor, Ada\nPY  - 2019\nDO  - https://doi.org/10.5555/X\nER  - \n"
+RIS = "TY  - JOUR\nTI  - Moths at dusk\nAU  - Adeyemi, Ada\nPY  - 2019\nDO  - https://doi.org/10.5555/X\nER  - \n"
 
 
 def test_read_recognises_the_format_and_normalises_identifiers():
@@ -15,7 +15,7 @@ def test_read_recognises_the_format_and_normalises_identifiers():
     assert lib["diagnostics"] == []
     [ref] = lib["references"]
     assert ref["DOI"] == "10.5555/x"
-    assert ref["author"] == [{"family": "Okafor", "given": "Ada"}]
+    assert ref["author"] == [{"family": "Adeyemi", "given": "Ada"}]
 
 
 def test_read_takes_bytes_in_any_encoding():
@@ -39,9 +39,9 @@ def test_bad_input_gives_diagnostics_with_lines():
 
 def test_write_every_writable_format():
     refs = pinakes.read(RIS)["references"]
-    assert pinakes.write(refs, "biblatex").startswith("@article{okafor2019moths,")
+    assert pinakes.write(refs, "biblatex").startswith("@article{adeyemi2019moths,")
     assert pinakes.write(refs, "ris").startswith("TY  - JOUR\n")
-    assert pinakes.write(refs, "hayagriva").startswith("okafor2019moths:\n")
+    assert pinakes.write(refs, "hayagriva").startswith("adeyemi2019moths:\n")
     assert json.loads(pinakes.write(refs, "csl-json")) == refs
     assert "{10.5555/x}" in pinakes.write(refs[0], "bibtex")
     with pytest.raises(ValueError, match="does not write"):

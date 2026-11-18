@@ -435,7 +435,7 @@ fn issued_with_pd(year: i32, pd: Option<&str>) -> Date {
 mod tests {
     use super::*;
 
-    const TEXT: &str = "FN Clarivate Analytics Web of Science\nVR 1.0\nPT J\nAU Okafor, AN\n   Lind, M\nAF Okafor, Ada N.\n   Lind, Maja\nCA Coastal Survey Team\nTI Moths at the edge of the\n   forest\nSO JOURNAL OF ANIMAL ECOLOGY\nDT Article; Early Access\nPD JUL 15\nPY 2019\nVL 88\nBP 1002\nEP 1013\nDI 10.5555/jae.2019.0001\nPM 31000001\nUT WOS:000000000000001\nER\n\nPT J\nAU Smith, J\nTI Second\nPY 2020\nUT WOS:000000000000002\nER\n\nEF\n";
+    const TEXT: &str = "FN Clarivate Analytics Web of Science\nVR 1.0\nPT J\nAU Adeyemi, AN\n   Lind, M\nAF Adeyemi, Ada N.\n   Lind, Maja\nCA Coastal Survey Team\nTI Moths at the edge of the\n   forest\nSO JOURNAL OF ANIMAL ECOLOGY\nDT Article; Early Access\nPD JUL 15\nPY 2019\nVL 88\nBP 1002\nEP 1013\nDI 10.5555/jae.2019.0001\nPM 31000001\nUT WOS:000000000000001\nER\n\nPT J\nAU Smith, J\nTI Second\nPY 2020\nUT WOS:000000000000002\nER\n\nEF\n";
 
     #[test]
     fn plain_text() {
@@ -467,7 +467,7 @@ mod tests {
 
     #[test]
     fn tab_delimited() {
-        let src = "PT\tAU\tAF\tTI\tSO\tPY\tDI\tUT\nJ\tLind, M; Okafor, AN\tLind, Maja; Okafor, Ada N.\tTide pools\tMAR ECOL\t2020\t10.5555/y\tWOS:3\n";
+        let src = "PT\tAU\tAF\tTI\tSO\tPY\tDI\tUT\nJ\tLind, M; Adeyemi, AN\tLind, Maja; Adeyemi, Ada N.\tTide pools\tMAR ECOL\t2020\t10.5555/y\tWOS:3\n";
         let mut d = Vec::new();
         let refs = read_tab(src, &mut d);
         assert_eq!(refs.len(), 1);

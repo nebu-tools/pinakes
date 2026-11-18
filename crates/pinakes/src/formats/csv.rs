@@ -308,7 +308,7 @@ pub(crate) fn is_record_header(header: &[String]) -> bool {
     has(&columns(header), Col::Title)
 }
 
-/// "Wainwright, Claire E. (7006453478)" to "Wainwright, Claire E.".
+/// "Fairbairn, Clara E. (7000000001)" to "Fairbairn, Clara E.".
 fn strip_author_id(s: &str) -> &str {
     let t = s.trim();
     if t.ends_with(')') {
@@ -326,7 +326,7 @@ fn author_list(cell: &str) -> Vec<Name> {
     if t.is_empty() || t.starts_with("[No author") {
         return Vec::new();
     }
-    // Older Scopus exports separate "Wainwright C.E., Elborn J.S." with commas.
+    // Older Scopus exports separate "Fairbairn C.E., Tremaine J.S." with commas.
     let parts = if !t.contains(';')
         && !t.contains('\n')
         && t.split(',').count() > 1
@@ -575,7 +575,7 @@ mod tests {
 
     #[test]
     fn scopus_style() {
-        let src = "\u{feff}\"Authors\",\"Author full names\",\"Title\",\"Year\",\"Source title\",\"DOI\",\"Abstract\",\"PubMed ID\",\"Document Type\",\"EID\",\"Funding Details\"\n\"Okafor A.N.; Lind M.\",\"Okafor, Ada N. (1); Lind, Maja (2)\",\"Moths\",\"2019\",\"J Ecol\",\"10.5555/x\",\"[No abstract available]\",\"31000001\",\"Article\",\"2-s2.0-1\",\"none\"\n";
+        let src = "\u{feff}\"Authors\",\"Author full names\",\"Title\",\"Year\",\"Source title\",\"DOI\",\"Abstract\",\"PubMed ID\",\"Document Type\",\"EID\",\"Funding Details\"\n\"Adeyemi A.N.; Lind M.\",\"Adeyemi, Ada N. (1); Lind, Maja (2)\",\"Moths\",\"2019\",\"J Ecol\",\"10.5555/x\",\"[No abstract available]\",\"31000001\",\"Article\",\"2-s2.0-1\",\"none\"\n";
         let mut d = Vec::new();
         let refs = read(src.trim_start_matches('\u{feff}'), &mut d);
         assert_eq!(refs.len(), 1, "{d:?}");
@@ -588,7 +588,7 @@ mod tests {
 
     #[test]
     fn semicolons_and_vancouver_authors() {
-        let src = "Nr;Title;Author(s);Journal;Year;DOI\n1;Tide pools;Lind M, Okafor AN;Mar Ecol;2020;https://doi.org/10.5555/y\n";
+        let src = "Nr;Title;Author(s);Journal;Year;DOI\n1;Tide pools;Lind M, Adeyemi AN;Mar Ecol;2020;https://doi.org/10.5555/y\n";
         let mut d = Vec::new();
         let refs = read(src, &mut d);
         assert_eq!(refs[0].author.len(), 2);

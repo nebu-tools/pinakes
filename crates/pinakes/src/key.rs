@@ -1,6 +1,6 @@
 //! Citation keys: `family` + `year` + the first significant word of the title.
 //!
-//! `okafor2019moths` for Okafor (2019) "The moths of the forest edge". Keys are ASCII letters
+//! `adeyemi2019moths` for Adeyemi (2019) "The moths of the forest edge". Keys are ASCII letters
 //! and digits: names and titles are folded ("Ødegård" to "odegaard"), and scripts with no Latin
 //! folding contribute nothing. When two records would share a key, the second gets `a`, the
 //! third `b`, and so on, the way Better BibTeX does it. A key a record already has is kept, and so is a CSL `id` shaped like a key. A
@@ -176,8 +176,8 @@ mod tests {
     #[test]
     fn keys() {
         assert_eq!(
-            key_for(&r("Okafor", 2019, "The moths of the forest edge")),
-            "okafor2019moths"
+            key_for(&r("Adeyemi", 2019, "The moths of the forest edge")),
+            "adeyemi2019moths"
         );
         assert_eq!(
             key_for(&r("Ødegård", 2001, "À la recherche")),

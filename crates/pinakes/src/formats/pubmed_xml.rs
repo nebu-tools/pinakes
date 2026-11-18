@@ -386,7 +386,7 @@ mod tests {
         <AbstractText Label="RESULTS">They fly at night.</AbstractText>
       </Abstract>
       <AuthorList CompleteYN="Y">
-        <Author ValidYN="Y"><LastName>Okafor</LastName><ForeName>Ada N</ForeName><Initials>AN</Initials></Author>
+        <Author ValidYN="Y"><LastName>Adeyemi</LastName><ForeName>Ada N</ForeName><Initials>AN</Initials></Author>
         <Author ValidYN="Y"><CollectiveName>Lunar Moth Survey Group</CollectiveName></Author>
       </AuthorList>
       <Language>eng</Language>

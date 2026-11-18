@@ -72,7 +72,7 @@ pub enum Reason {
 
 impl Reason {
     /// The evidence as a sentence fragment, as kittum shows it: "Same DOI 10.5555/x",
-    /// "Titles 96% alike", "same year 2024", "same first author Okafor".
+    /// "Titles 96% alike", "same year 2024", "same first author Adeyemi".
     pub fn describe(&self) -> String {
         match self {
             Reason::Identifier { kind, value } => format!("Same {} {value}", kind.label()),
@@ -909,7 +909,7 @@ mod tests {
 
     #[test]
     fn identifiers_decide() {
-        let mut a = rec("Moths at the forest edge", Some(2019), "Okafor");
+        let mut a = rec("Moths at the forest edge", Some(2019), "Adeyemi");
         let mut b = rec("Something else entirely", Some(2005), "Lind");
         a.doi = Some("10.5555/x".into());
         b.doi = Some("10.5555/X".into());
@@ -933,14 +933,14 @@ mod tests {
 
     #[test]
     fn titles_years_authors() {
-        let a = rec("The moths of the forest edge.", Some(2019), "Okafor");
-        let b = rec("The Moths of the Forest Edge", Some(2020), "Okafor");
+        let a = rec("The moths of the forest edge.", Some(2019), "Adeyemi");
+        let b = rec("The Moths of the Forest Edge", Some(2020), "Adeyemi");
         let c = compare_pair(&a, &b).unwrap();
         assert_eq!(c.reasons.len(), 3);
-        assert_eq!(c.reasons[2].describe(), "same first author Okafor");
+        assert_eq!(c.reasons[2].describe(), "same first author Adeyemi");
         assert!(compare_pair(
             &a,
-            &rec("The moths of the forest edge", Some(2022), "Okafor")
+            &rec("The moths of the forest edge", Some(2022), "Adeyemi")
         )
         .is_none());
         assert!(
@@ -957,9 +957,9 @@ mod tests {
     #[test]
     fn groups_refuse_conflicting_ids() {
         let mut refs = vec![
-            rec("Moths at the forest edge", Some(2019), "Okafor"),
-            rec("Moths at the forest edge", Some(2019), "Okafor"),
-            rec("Moths at the forest edge", Some(2019), "Okafor"),
+            rec("Moths at the forest edge", Some(2019), "Adeyemi"),
+            rec("Moths at the forest edge", Some(2019), "Adeyemi"),
+            rec("Moths at the forest edge", Some(2019), "Adeyemi"),
         ];
         refs[0].doi = Some("10.5555/a".into());
         refs[2].doi = Some("10.5555/b".into());

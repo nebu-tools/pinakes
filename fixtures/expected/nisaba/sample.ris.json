@@ -10,7 +10,7 @@
       "DOI": "10.0000/example",
       "author": [
         {
-          "family": "Mustermann",
+          "family": "Virtanen",
           "given": "Anna"
         },
         {
@@ -32,7 +32,7 @@
       "title": "Methodik der Feldbeobachtung",
       "author": [
         {
-          "family": "Gabler"
+          "family": "Quist"
         }
       ],
       "issued": {

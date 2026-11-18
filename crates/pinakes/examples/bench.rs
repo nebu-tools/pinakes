@@ -67,7 +67,7 @@ const WORDS: &[&str] = &[
     "transit",
 ];
 const FAMILIES: &[&str] = &[
-    "Okafor",
+    "Adeyemi",
     "Lind",
     "Ødegård",
     "García Márquez",
@@ -79,7 +79,7 @@ const FAMILIES: &[&str] = &[
     "Chen",
     "Müller",
     "Silva",
-    "Novak",
+    "Szymanski",
     "Adeyemi",
     "Rossi",
     "Kim",

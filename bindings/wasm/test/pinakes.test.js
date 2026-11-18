@@ -16,14 +16,14 @@ import pinakes, {
 
 const fixture = (path) => readFileSync(new URL(`../../../fixtures/${path}`, import.meta.url));
 
-const RIS = "TY  - JOUR\nTI  - Moths at dusk\nAU  - Okafor, Ada\nPY  - 2019\nDO  - https://doi.org/10.5555/X\nER  - \n";
+const RIS = "TY  - JOUR\nTI  - Moths at dusk\nAU  - Adeyemi, Ada\nPY  - 2019\nDO  - https://doi.org/10.5555/X\nER  - \n";
 
 test("read recognises the format and normalises identifiers", () => {
   const lib = read(RIS);
   assert.equal(lib.format, "ris");
   assert.equal(lib.references.length, 1);
   assert.equal(lib.references[0].DOI, "10.5555/x");
-  assert.deepEqual(lib.references[0].author, [{ family: "Okafor", given: "Ada" }]);
+  assert.deepEqual(lib.references[0].author, [{ family: "Adeyemi", given: "Ada" }]);
   assert.deepEqual(lib.diagnostics, []);
 });
 
@@ -51,10 +51,10 @@ test("bad input gives diagnostics with lines, not exceptions", () => {
 
 test("write in every writable format, and refuse the others", () => {
   const refs = read(RIS).references;
-  assert.match(write(refs, "biblatex"), /^@article\{okafor2019moths,/);
+  assert.match(write(refs, "biblatex"), /^@article\{adeyemi2019moths,/);
   assert.match(write(refs, "bibtex"), /doi += \{10\.5555\/x\}/);
   assert.match(write(refs, "ris"), /^TY {2}- JOUR\n/);
-  assert.match(write(refs, "hayagriva"), /^okafor2019moths:\n/);
+  assert.match(write(refs, "hayagriva"), /^adeyemi2019moths:\n/);
   assert.deepEqual(JSON.parse(write(refs, "csl-json")), refs);
   assert.throws(() => write(refs, "medline"), /does not write/);
   assert.throws(() => write(refs, "nonsense"), /unknown format/);
