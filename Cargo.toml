@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"
-members = ["crates/pinakes"]
-default-members = ["crates/pinakes"]
+members = ["crates/pinakes", "crates/pinakes-cli"]
+default-members = ["crates/pinakes", "crates/pinakes-cli"]
 
 [workspace.package]
 version = "0.1.0"
