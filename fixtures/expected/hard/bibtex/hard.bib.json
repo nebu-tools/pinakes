@@ -211,6 +211,7 @@
       "type": "document",
       "citation-key": "circa",
       "title": "An undated broadside",
+      "container-title": "Printed sheet",
       "issued": {
         "date-parts": [
           [
@@ -218,15 +219,6 @@
           ]
         ],
         "raw": "1999?"
-      },
-      "custom": {
-        "source-fields": [
-          {
-            "format": "bibtex",
-            "name": "howpublished",
-            "value": "Printed sheet"
-          }
-        ]
       }
     },
     {

@@ -14,8 +14,12 @@ FormatName = Literal[
 ]
 WritableFormat = Literal["ris", "bibtex", "biblatex", "csl-json", "hayagriva"]
 IdKind = Literal["doi", "pmid", "pmcid", "isbn", "issn", "arxiv"]
+# How two records relate. Only "duplicate" joins records into groups.
+Relation = Literal["duplicate", "version", "notice", "comment", "part", "translation"]
 
-# A CSL-JSON item. What CSL has no variable for goes under "custom".
+# A CSL-JSON item. What CSL has no variable for goes under "custom". Members Pinakes does not
+# model, in the item and in its names and dates, are kept and written back. In a name list,
+# {"literal": "others"} stands for the names left out (BibTeX's "and others", RIS's "et al.").
 Reference = dict[str, Any]
 References = Union[Mapping[str, Any], Iterable[Mapping[str, Any]]]
 
@@ -47,7 +51,7 @@ class Reason(TypedDict, total=False):
 class Candidate(TypedDict):
     a: int
     b: int
-    relation: Literal["duplicate", "version", "notice"]
+    relation: Relation
     score: float
     exact: bool
     reasons: list[Reason]

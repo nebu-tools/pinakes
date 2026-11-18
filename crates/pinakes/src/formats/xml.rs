@@ -8,6 +8,11 @@
 use crate::diag::Diagnostic;
 use crate::text::LineIndex;
 
+/// Elements nest at most this deep. PubMed's deepest path is under 10; anything deeper is
+/// kept as text in the deepest element allowed, with an `xml.too-deep` error, so no input
+/// can make reading, walking or dropping the tree recurse without bound.
+pub const MAX_DEPTH: usize = 256;
+
 #[derive(Debug, Default)]
 pub struct Element {
     pub name: String,
@@ -162,6 +167,9 @@ pub fn parse(src: &str, diags: &mut Vec<Diagnostic>) -> Element {
         ..Element::default()
     }];
     let mut i = 0;
+    // Start tags past MAX_DEPTH that are still open: their elements are not built.
+    let mut ignored = 0usize;
+    let mut warned_deep = false;
     while i < b.len() {
         if b[i] != b'<' {
             let start = i;
@@ -248,6 +256,10 @@ pub fn parse(src: &str, diags: &mut Vec<Diagnostic>) -> Element {
         let inner = &src[i + 1..j];
         i = j + 1;
         if let Some(name) = inner.strip_prefix('/') {
+            if ignored > 0 {
+                ignored -= 1;
+                continue;
+            }
             let name = local(name.trim()).to_string();
             match stack.iter().rposition(|e| e.name == name) {
                 Some(pos) if pos > 0 => {
@@ -315,6 +327,20 @@ pub fn parse(src: &str, diags: &mut Vec<Diagnostic>) -> Element {
         }
         if self_closing {
             stack.last_mut().unwrap().children.push(Node::Element(el));
+        } else if stack.len() > MAX_DEPTH {
+            if !warned_deep {
+                warned_deep = true;
+                diags.push(
+                    Diagnostic::error(
+                        "xml.too-deep",
+                        format!(
+                            "Elements nest more than {MAX_DEPTH} deep; the tags below are dropped and their text kept"
+                        ),
+                    )
+                    .at(line),
+                );
+            }
+            ignored += 1;
         } else {
             stack.push(el);
         }
@@ -355,6 +381,23 @@ mod tests {
         assert!(a.child("c").is_some());
         assert_eq!(a.text_of("d").as_deref(), Some("open"));
         assert!(d.iter().any(|x| x.code == "xml.unclosed"));
+    }
+
+    #[test]
+    fn deep_nesting_is_cut_with_a_diagnostic() {
+        let n = 200_000;
+        let src = format!("{}deep{}", "<a>".repeat(n), "</a>".repeat(n));
+        let mut d = Vec::new();
+        let doc = parse(&src, &mut d);
+        assert!(d.iter().any(|x| x.code == "xml.too-deep"));
+        assert_eq!(doc.text(false), "deep");
+        let mut depth = 0;
+        let mut at = &doc;
+        while let Some(c) = at.child("a") {
+            depth += 1;
+            at = c;
+        }
+        assert_eq!(depth, MAX_DEPTH);
     }
 
     #[test]

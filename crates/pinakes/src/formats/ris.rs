@@ -147,8 +147,10 @@ fn records(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<RawRecord> {
                         // A blank line between lines of an abstract or note: a new paragraph.
                         value.push_str("\n\n");
                     } else if joins_with_newline(tag)
-                        && line.starts_with(|c: char| !c.is_whitespace())
+                        && (line.starts_with(|c: char| !c.is_whitespace())
+                            || (line.starts_with("  ") && tag_line(line.trim()).is_some()))
                     {
+                        // The writer indents a line of text that would read as a tag.
                         value.push('\n');
                     } else {
                         value.push(' ');
@@ -437,8 +439,14 @@ fn to_reference(raw: RawRecord, index: usize, diags: &mut Vec<Diagnostic>) -> Re
             }
             "PY" | "Y1" => {
                 if py.is_none() {
-                    py = crate::dates::parse_date(v);
-                    py.is_some()
+                    // A year that is not one ("in press") is the date's text.
+                    py = crate::dates::parse_date(v).or_else(|| {
+                        Some(Date {
+                            literal: non_empty(v),
+                            ..Date::default()
+                        })
+                    });
+                    true
                 } else {
                     false
                 }
@@ -580,7 +588,8 @@ fn to_reference(raw: RawRecord, index: usize, diags: &mut Vec<Diagnostic>) -> Re
             // Cochrane's link to the record.
             "US" => set_once(&mut r.url, v),
             "JI" => set_once(&mut r.container_title_short, v),
-            "M3" if r.genre.is_none() && r.kind == "thesis" => set_once(&mut r.genre, v),
+            // M3 is the type of work: a thesis's degree, a report's kind.
+            "M3" => set_once(&mut r.genre, v),
             _ => false,
         };
         if !kept {
@@ -647,11 +656,16 @@ pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
 }
 
 fn push(out: &mut String, tag: &str, value: &str) {
+    // Reading drops byte-order marks and NULs first, so they must not hide a tag here.
+    let value = value
+        .replace("\r\n", "\n")
+        .replace('\r', "\n")
+        .replace(['\u{feff}', '\0'], "");
     let mut lines = value.split('\n');
     let first = lines.next().unwrap_or("");
     out.push_str(tag);
     out.push_str("  - ");
-    out.push_str(first.trim_end());
+    out.push_str(first.trim());
     out.push('\n');
     // A paragraph break becomes one blank line, which `read` turns back into a break.
     let mut blank = false;
@@ -664,6 +678,13 @@ fn push(out: &mut String, tag: &str, value: &str) {
         if std::mem::take(&mut blank) {
             out.push('\n');
         }
+        // A line that reads as a tag is indented, and one starting "- " (which the reader takes
+        // as a continuation marker) gets another.
+        if tag_line(more).is_some() {
+            out.push_str("  ");
+        } else if more.starts_with("- ") || more == "-" {
+            out.push_str("- ");
+        }
         out.push_str(more);
         out.push('\n');
     }
@@ -675,13 +696,29 @@ fn one_line(s: &str) -> String {
 
 /// Write RIS. Each record ends with `ER  - ` and a blank line. Values that held line breaks
 /// (abstracts, notes) continue on lines without a tag, which [`read`] joins back.
+/// A name as RIS holds it: "Family, Given, Suffix". A person with only a family name of
+/// several words ends in a comma, which tells it from an organisation.
+/// The marker for names left out is "et al.".
+fn ris_name(n: &crate::model::Name) -> String {
+    if n.is_others() {
+        return "et al.".to_string();
+    }
+    let text = n.inverted();
+    if n.literal.is_none() && n.given.is_none() && n.suffix.is_none() && text.contains(' ') {
+        format!("{text},")
+    } else {
+        text
+    }
+}
+
 pub fn write(refs: &[Reference]) -> String {
     let mut out = String::new();
     for r in refs {
         let ty = r
             .source_fields_of(FORMAT)
             .find(|f| f.name == "TY")
-            .map(|f| f.value.clone())
+            .map(|f| one_line(&f.value))
+            .filter(|t| !t.is_empty())
             .unwrap_or_else(|| kind_to_ris(&r.kind).to_string());
         push(&mut out, "TY", &ty);
         if let Some(k) = r
@@ -704,10 +741,10 @@ pub fn write(refs: &[Reference]) -> String {
             push(&mut out, "ST", &one_line(t));
         }
         for a in &r.author {
-            push(&mut out, "AU", &a.inverted());
+            push(&mut out, "AU", &ris_name(a));
         }
         for e in &r.editor {
-            push(&mut out, "A2", &e.inverted());
+            push(&mut out, "A2", &ris_name(e));
         }
         if let Some(d) = &r.issued {
             match (&d.start, &d.literal) {
@@ -725,7 +762,12 @@ pub fn write(refs: &[Reference]) -> String {
             push(&mut out, "Y2", &ris_date(&d));
         }
         if let Some(c) = &r.container_title {
-            push(&mut out, "T2", &one_line(c));
+            // A book's T2 is its series, so a book's container goes in JF.
+            push(
+                &mut out,
+                if r.kind == "book" { "JF" } else { "T2" },
+                &one_line(c),
+            );
         }
         if let Some(c) = &r.container_title_short {
             push(&mut out, "J2", &one_line(c));
@@ -754,7 +796,9 @@ pub fn write(refs: &[Reference]) -> String {
         }
         if let Some(p) = &r.page {
             match p.split_once('-') {
-                Some((s, e)) if !p.contains(',') => {
+                Some((s, e))
+                    if !p.contains(',') && !s.trim().is_empty() && !e.trim().is_empty() =>
+                {
                     push(&mut out, "SP", s.trim());
                     push(&mut out, "EP", e.trim());
                 }
@@ -804,8 +848,10 @@ pub fn write(refs: &[Reference]) -> String {
         if let Some(g) = &r.genre {
             push(&mut out, "M3", g);
         }
+        // A source field whose name is not a tag cannot be written; RIS has nowhere for it.
         for f in r.source_fields_of(FORMAT) {
-            if f.name != "TY" && f.name != "ER" {
+            let tag_ok = tag_line(&format!("{}  - ", f.name)).is_some_and(|(t, _)| t == f.name);
+            if tag_ok && f.name != "TY" && f.name != "ER" {
                 push(&mut out, &f.name, &f.value);
             }
         }

@@ -10,6 +10,7 @@
       "volume": "18",
       "issue": "4",
       "page": "201-214",
+      "genre": "Journal Article",
       "abstract": "This realistic fixture represents an EndNote RIS export used for a collaborative research project.",
       "note": "search: S1; database: MEDLINE; search date: 2024-02-01",
       "URL": "https://doi.org/10.1234/example.2023.0042",
@@ -47,11 +48,6 @@
             "format": "ris",
             "name": "C1",
             "value": "University Field Station Example, Germany"
-          },
-          {
-            "format": "ris",
-            "name": "M3",
-            "value": "Journal Article"
           }
         ]
       }
@@ -61,6 +57,7 @@
       "type": "report",
       "title": "Methods for the assessment of field surveys",
       "publisher": "Example Research Institute",
+      "genre": "Report",
       "note": "search: S1; database: Embase; search date: 2024-02-01",
       "author": [
         {
@@ -76,14 +73,7 @@
       },
       "custom": {
         "accession-number": "endnote-survey-methods",
-        "database": "Embase",
-        "source-fields": [
-          {
-            "format": "ris",
-            "name": "M3",
-            "value": "Report"
-          }
-        ]
+        "database": "Embase"
       }
     }
   ]

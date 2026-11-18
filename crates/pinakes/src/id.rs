@@ -174,6 +174,32 @@ fn percent_decode(s: &str) -> String {
     String::from_utf8(out).unwrap_or_else(|_| s.to_string())
 }
 
+/// `s` without the punctuation that ends a sentence or closes a bracket the DOI did not
+/// open: "(see 10.1/x)." loses ")." but "10.1002/(sici)" keeps its ")".
+fn trim_unbalanced(mut s: &str) -> &str {
+    loop {
+        let Some(last) = s.chars().last() else {
+            return s;
+        };
+        let strip = match last {
+            '.' | ',' | ';' | ':' | '"' | '\'' => true,
+            ')' | ']' | '>' => {
+                let open = match last {
+                    ')' => '(',
+                    ']' => '[',
+                    _ => '<',
+                };
+                s.matches(last).count() > s.matches(open).count()
+            }
+            _ => false,
+        };
+        if !strip {
+            return s;
+        }
+        s = &s[..s.len() - last.len_utf8()];
+    }
+}
+
 /// DOI normal form: the `10.` name, lower case (DOIs compare without case).
 pub fn doi(input: &str) -> Option<String> {
     let mut s = input.trim();
@@ -187,9 +213,20 @@ pub fn doi(input: &str) -> Option<String> {
         }
     }
     let lower = s.to_ascii_lowercase();
+    let mut from_url = false;
     if lower.starts_with("http://") || lower.starts_with("https://") || lower.contains("doi.org/") {
-        let at = lower.find("doi.org/")?;
-        s = &s[at + "doi.org/".len()..];
+        // A URL: the query and fragment are not part of the DOI (a `#` or `?` in a DOI
+        // is percent-encoded in a URL).
+        s = &s[..s.find(['?', '#']).unwrap_or(s.len())];
+        match s.to_ascii_lowercase().find("doi.org/") {
+            Some(at) => s = &s[at + "doi.org/".len()..],
+            None => {
+                // A publisher's landing page, ".../doi/full/10.1002/x/full".
+                let at = s.find("/10.")?;
+                s = &s[at + 1..];
+                from_url = true;
+            }
+        }
     }
     let decoded = percent_decode(s);
     let mut d = decoded.trim();
@@ -201,8 +238,28 @@ pub fn doi(input: &str) -> Option<String> {
         }
         d = &d[at..];
     }
-    let d = d.split_whitespace().next()?;
-    let d = d.trim_end_matches(['.', ',', ';', ')', ']']);
+    let mut d = d.split_whitespace().next()?;
+    if from_url {
+        // What a publisher's site appends to the DOI in its page paths.
+        for tail in [
+            "/full",
+            "/abstract",
+            "/epdf",
+            "/pdf",
+            "/pdfdirect",
+            "/html",
+            ".pdf",
+        ] {
+            if d.len() > tail.len()
+                && d.is_char_boundary(d.len() - tail.len())
+                && d[d.len() - tail.len()..].eq_ignore_ascii_case(tail)
+            {
+                d = &d[..d.len() - tail.len()];
+                break;
+            }
+        }
+    }
+    let d = trim_unbalanced(d);
     let (prefix, suffix) = d.split_once('/')?;
     let registrant = prefix.strip_prefix("10.")?;
     if registrant.is_empty()
@@ -468,6 +525,57 @@ mod tests {
         assert_eq!(doi("not a doi"), None);
         assert_eq!(doi("10.12/x"), None);
         assert_eq!(doi("10.5555/"), None);
+    }
+
+    /// Real-world DOI shapes: what a reference manager, a PDF or a web page hands over, and
+    /// the DOI it stands for.
+    #[test]
+    fn doi_shapes() {
+        let sici = "10.1002/(sici)1097-4571(199205)43:4<284::aid-asi5>3.0.co;2-0";
+        for (input, want) in [
+            // SICI, with every bracket and the `;` kept.
+            ("10.1002/(SICI)1097-4571(199205)43:4<284::AID-ASI5>3.0.CO;2-0", Some(sici)),
+            ("(10.1002/(SICI)1097-4571(199205)43:4<284::AID-ASI5>3.0.CO;2-0).", Some(sici)),
+            ("10.1002/(SICI)1097-4636(199706)35:4<425::AID-JBM3>3.0.CO;2-#", Some("10.1002/(sici)1097-4636(199706)35:4<425::aid-jbm3>3.0.co;2-#")),
+            ("10.1002/(sici)", Some("10.1002/(sici)")),
+            ("10.1016/S2213-2600(20)30517-8", Some("10.1016/s2213-2600(20)30517-8")),
+            ("see doi 10.1016/S2213-2600(20)30517-8).", Some("10.1016/s2213-2600(20)30517-8")),
+            // A sentence-final full stop and other closing punctuation.
+            ("10.1056/NEJMoa2034577.", Some("10.1056/nejmoa2034577")),
+            ("10.1056/NEJMoa2034577;", Some("10.1056/nejmoa2034577")),
+            ("\"10.1056/NEJMoa2034577\",", Some("10.1056/nejmoa2034577")),
+            ("[10.1056/NEJMoa2034577]", Some("10.1056/nejmoa2034577")),
+            // Prefixes and resolvers.
+            ("doi:10.1056/NEJMoa2034577", Some("10.1056/nejmoa2034577")),
+            ("DOI 10.1056/NEJMoa2034577", Some("10.1056/nejmoa2034577")),
+            ("info:doi/10.1056/NEJMoa2034577", Some("10.1056/nejmoa2034577")),
+            ("https://doi.org/10.1056/NEJMoa2034577", Some("10.1056/nejmoa2034577")),
+            ("https://dx.doi.org/10.1056/NEJMoa2034577?via=x#top", Some("10.1056/nejmoa2034577")),
+            // A resolver only in the query or fragment, or after a broken scheme, is not one.
+            ("ht#p://dx.doi.org/10.5555/x", None),
+            ("https://example.org/a?u=doi.org/10.5555/x", None),
+            // Percent-encoding.
+            ("https://doi.org/10.5555/a%2Fb", Some("10.5555/a/b")),
+            ("https://doi.org/10.1002%2F%28SICI%291097-4571%28199205%2943%3A4%3C284%3A%3AAID-ASI5%3E3.0.CO%3B2-0", Some(sici)),
+            ("https://doi.org/10.5555/x%23y", Some("10.5555/x#y")),
+            // Mixed case.
+            ("10.1093/NAR/GKAA1100", Some("10.1093/nar/gkaa1100")),
+            ("10.1093/nar/gkaa1100", Some("10.1093/nar/gkaa1100")),
+            // Publisher pages with a view appended.
+            ("https://onlinelibrary.wiley.com/doi/full/10.1002/sim.1186", Some("10.1002/sim.1186")),
+            ("https://onlinelibrary.wiley.com/doi/10.1002/sim.1186/full", Some("10.1002/sim.1186")),
+            ("https://onlinelibrary.wiley.com/doi/epdf/10.1002/sim.1186", Some("10.1002/sim.1186")),
+            ("https://www.pnas.org/doi/10.1073/pnas.0506580102.pdf", Some("10.1073/pnas.0506580102")),
+            ("https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0000001", None),
+            // A doi.org path is the DOI itself, tail and all.
+            ("https://doi.org/10.5555/report.pdf", Some("10.5555/report.pdf")),
+            // Not DOIs.
+            ("x10.1056/NEJMoa2034577", None),
+            ("10.12/x", None),
+            ("10.5555/.", None),
+        ] {
+            assert_eq!(doi(input).as_deref(), want, "{input}");
+        }
     }
 
     #[test]

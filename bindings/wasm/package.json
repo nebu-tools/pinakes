@@ -26,7 +26,7 @@
   ],
   "scripts": {
     "build": "sh build.sh",
-    "test": "node --test test/ && bun test",
+    "test": "node --test test/*.test.js && bun test",
     "typecheck": "npx -y -p typescript@5.9.3 tsc -p ."
   }
 }

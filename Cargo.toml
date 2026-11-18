@@ -13,7 +13,7 @@ rust-version = "1.85"
 [workspace.dependencies]
 pinakes = { path = "crates/pinakes" }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 
 [profile.release]
 lto = true

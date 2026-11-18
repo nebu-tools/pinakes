@@ -82,6 +82,29 @@ def test_find_duplicates():
     assert {"members": [0, 6], "exact": True} in dups["groups"]
 
 
+def test_name_and_date_members_and_others_survive():
+    item = {
+        "id": "x",
+        "type": "book",
+        "title": "Tides",
+        "author": [{"family": "Lind", "given": "K", "static-ordering": True}, {"literal": "others"}],
+        "issued": {"date-parts": [[2020]], "season": 2},
+    }
+    for fmt in ["csl-json", "bibtex"]:
+        back = pinakes.read(pinakes.write([item], fmt))["references"][0]
+        assert back["author"][-1] == {"literal": "others"}, fmt
+    back = pinakes.read(pinakes.write([item], "csl-json"))["references"][0]
+    assert back["author"][0]["static-ordering"] is True
+    assert back["issued"]["season"] == 2
+
+
+def test_chapter_and_book_are_a_part():
+    base = {"title": "Moths at the forest edge", "DOI": "10.5555/x", "author": [{"family": "Adeyemi"}], "issued": {"date-parts": [[2019]]}}
+    dups = pinakes.find_duplicates([{**base, "id": "a", "type": "chapter"}, {**base, "id": "b", "type": "book"}])
+    assert dups["pairs"][0]["relation"] == "part"
+    assert dups["groups"] == []
+
+
 def test_identifiers():
     assert pinakes.normalise_id("doi", "https://doi.org/10.5555/ABC") == "10.5555/abc"
     assert pinakes.normalise_id("isbn", "0-306-40615-2") == "9780306406157"

@@ -11,6 +11,7 @@
       "volume": "16",
       "issue": "3",
       "page": "361-368",
+      "genre": "Article",
       "abstract": "Objective: To compare moth counts before and after streetlights were dimmed.",
       "language": "English",
       "URL": "http://ovidsp.ovid.com/ovidweb.cgi?T=JS&PAGE=reference&D=emed18&NEWS=N&AN=615024109",
@@ -36,14 +37,7 @@
       },
       "custom": {
         "accession-number": "615024109",
-        "database": "Embase",
-        "source-fields": [
-          {
-            "format": "ris",
-            "name": "M3",
-            "value": "Article"
-          }
-        ]
+        "database": "Embase"
       }
     },
     {

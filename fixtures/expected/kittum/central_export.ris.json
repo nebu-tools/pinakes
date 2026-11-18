@@ -6,6 +6,7 @@
       "id": "CN-01077759",
       "type": "article-journal",
       "title": "Streetlight-moth interactions in meadows bordering rural roads",
+      "genre": "CD012345",
       "abstract": "BACKGROUND: Moths pollinate many meadow plants at night. METHODS: In two field surveys (LANTERN and BEACON, S-1807897), we counted moths under lit and unlit road verges. RESULTS: The primary count differed.",
       "DOI": "10.5555/ecola.1409547",
       "author": [
@@ -31,14 +32,7 @@
       },
       "custom": {
         "accession-number": "CN-01077759",
-        "database": "Cochrane Central Register of Controlled Trials",
-        "source-fields": [
-          {
-            "format": "ris",
-            "name": "M3",
-            "value": "CD012345"
-          }
-        ]
+        "database": "Cochrane Central Register of Controlled Trials"
       }
     },
     {

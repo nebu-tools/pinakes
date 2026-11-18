@@ -68,6 +68,30 @@ test("unknown CSL-JSON fields survive a round trip", () => {
   assert.equal(back.custom["my-flag"], true);
 });
 
+test("name and date members, and the others name, survive a round trip", () => {
+  const item = {
+    id: "x",
+    type: "book",
+    title: "Tides",
+    author: [{ family: "Lind", given: "K", "static-ordering": true }, { literal: "others" }],
+    issued: { "date-parts": [[2020]], season: 2 },
+  };
+  for (const format of ["csl-json", "bibtex"]) {
+    const back = read(write([item], format)).references[0];
+    assert.deepEqual(back.author.at(-1), { literal: "others" }, format);
+  }
+  const back = read(write([item], "csl-json")).references[0];
+  assert.equal(back.author[0]["static-ordering"], true);
+  assert.equal(back.issued.season, 2);
+});
+
+test("a chapter and its book are a part, not a duplicate", () => {
+  const base = { title: "Moths at the forest edge", DOI: "10.5555/x", author: [{ family: "Adeyemi" }], issued: { "date-parts": [[2019]] } };
+  const dups = findDuplicates([{ ...base, id: "a", type: "chapter" }, { ...base, id: "b", type: "book" }]);
+  assert.equal(dups.pairs[0].relation, "part");
+  assert.deepEqual(dups.groups, []);
+});
+
 test("keys: generated, collision-free, and overridable", () => {
   const refs = [
     { id: "1", type: "article-journal", title: "The moths of the forest", author: [{ family: "Lind" }], issued: { "date-parts": [[2020]] } },

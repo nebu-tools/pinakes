@@ -97,11 +97,29 @@ pub fn to_value(r: &Reference) -> Value {
             ),
         );
     }
-    for (k, v) in &r.extra {
-        if k != "custom" && !m.contains_key(k) {
-            m.insert(k.clone(), v.clone());
+    if let Some(raw) = r.extra.get("keyword") {
+        if keyword_list(raw) == r.keywords {
+            m.insert("keyword".into(), raw.clone());
         }
     }
+    for role in ["author", "editor"] {
+        if let Some(raw) = r.extra.get(role) {
+            let names = if role == "author" {
+                &r.author
+            } else {
+                &r.editor
+            };
+            if &names_of(raw) == names {
+                m.insert(role.into(), raw.clone());
+            }
+        }
+    }
+    merge_raw(
+        &mut m,
+        &r.extra,
+        TYPED_TOP,
+        &["custom", "keyword", "author", "editor"],
+    );
     if !custom.is_empty() {
         m.insert("custom".into(), Value::Object(custom));
     }
@@ -121,7 +139,89 @@ fn name_value(n: &Name) -> Value {
     put("dropping-particle", &n.dropping_particle);
     put("suffix", &n.suffix);
     put("literal", &n.literal);
+    merge_raw(&mut m, &n.extra, NAME_PARTS, &[]);
     Value::Object(m)
+}
+
+/// Put back the members a reader kept as they came. A kept member replaces the typed one when it
+/// still reads as the same text (`12` for "12"). A member the model types (`typed`) but no
+/// longer holds is written back only if it never read as text: otherwise the model cleared it.
+/// Members named in `skip` are left to the caller.
+fn merge_raw(m: &mut Map<String, Value>, kept: &Map<String, Value>, typed: &[&str], skip: &[&str]) {
+    for (k, raw) in kept {
+        if skip.contains(&k.as_str()) {
+            continue;
+        }
+        match m.get(k) {
+            Some(Value::String(typed)) => {
+                if string_of(raw).as_deref() == Some(typed.as_str()) {
+                    m.insert(k.clone(), raw.clone());
+                }
+            }
+            Some(_) => {}
+            None => {
+                let cleared = typed.contains(&k.as_str())
+                    && matches!(raw, Value::String(_) | Value::Number(_))
+                    && string_of(raw).is_some();
+                if !cleared {
+                    m.insert(k.clone(), raw.clone());
+                }
+            }
+        }
+    }
+}
+
+/// Keep `raw` under `key` when the typed slot will not write it back as it came.
+fn keep_raw(kept: &mut Map<String, Value>, key: &str, raw: &Value) {
+    if !matches!(raw, Value::String(s) if string_of(raw).as_deref() == Some(s.as_str())) {
+        kept.insert(key.to_string(), raw.clone());
+    }
+}
+
+/// Names as the reader leaves them.
+fn names_of(v: &Value) -> Vec<Name> {
+    let mut r = Reference {
+        author: match v {
+            Value::Array(a) => a.iter().filter_map(parse_name_value).collect(),
+            other => parse_name_value(other).into_iter().collect(),
+        },
+        ..Reference::default()
+    };
+    crate::normalise::normalise(&mut r);
+    r.author
+}
+
+/// Keywords as the model holds them: single terms, split on commas and semicolons, each once.
+fn keyword_list(v: &Value) -> Vec<String> {
+    let mut r = Reference {
+        keywords: match v {
+            Value::Array(a) => a.iter().filter_map(string_of).collect(),
+            Value::String(s) => vec![s.clone()],
+            _ => Vec::new(),
+        },
+        ..Reference::default()
+    };
+    crate::normalise::normalise(&mut r);
+    r.keywords
+}
+
+fn circa_of(v: Option<&Value>) -> bool {
+    match v {
+        Some(Value::Bool(b)) => *b,
+        Some(Value::Number(_)) => true,
+        Some(Value::String(s)) => !s.is_empty(),
+        _ => false,
+    }
+}
+
+fn date_parts_of(v: Option<&Value>) -> (Option<Ymd>, Option<Ymd>) {
+    match v {
+        Some(Value::Array(parts)) => (
+            parts.first().and_then(parse_ymd),
+            parts.get(1).and_then(parse_ymd),
+        ),
+        _ => (None, None),
+    }
 }
 
 fn ymd_value(d: &Ymd) -> Value {
@@ -153,6 +253,22 @@ fn date_value(d: &Date) -> Value {
     if let Some(r) = &d.raw {
         m.insert("raw".into(), Value::String(r.clone()));
     }
+    if let Some(raw) = d.extra.get("date-parts") {
+        if date_parts_of(Some(raw)) == (d.start, d.end) {
+            m.insert("date-parts".into(), raw.clone());
+        }
+    }
+    if let Some(raw) = d.extra.get("circa") {
+        if circa_of(Some(raw)) == d.circa {
+            m.insert("circa".into(), raw.clone());
+        }
+    }
+    merge_raw(
+        &mut m,
+        &d.extra,
+        &["literal", "raw"],
+        &["date-parts", "circa"],
+    );
     Value::Object(m)
 }
 
@@ -174,15 +290,23 @@ fn parse_name_value(v: &Value) -> Option<Name> {
         Value::String(s) => Some(crate::names::parse_name(s)),
         Value::Object(o) => {
             let get = |k: &str| o.get(k).and_then(string_of);
-            let n = Name {
+            let mut n = Name {
                 family: get("family"),
                 given: get("given"),
                 particle: get("non-dropping-particle"),
                 dropping_particle: get("dropping-particle"),
                 suffix: get("suffix"),
                 literal: get("literal"),
+                extra: Map::new(),
             };
-            (!n.is_empty()).then_some(n)
+            for (k, raw) in o {
+                if NAME_PARTS.contains(&k.as_str()) {
+                    keep_raw(&mut n.extra, k, raw);
+                } else {
+                    n.extra.insert(k.clone(), raw.clone());
+                }
+            }
+            (!n.is_empty() || !n.extra.is_empty()).then_some(n)
         }
         _ => None,
     }
@@ -222,26 +346,46 @@ pub(crate) fn parse_date_value(v: &Value) -> Option<Date> {
         Value::Number(n) => n.as_i64().map(|y| Date::year(y as i32)),
         Value::Object(o) => {
             let mut d = Date::default();
-            if let Some(Value::Array(parts)) = o.get("date-parts") {
-                d.start = parts.first().and_then(parse_ymd);
-                d.end = parts.get(1).and_then(parse_ymd);
-            }
-            d.circa = matches!(
-                o.get("circa"),
-                Some(Value::Bool(true)) | Some(Value::Number(_))
-            ) || matches!(o.get("circa"), Some(Value::String(s)) if !s.is_empty());
+            (d.start, d.end) = date_parts_of(o.get("date-parts"));
+            d.circa = circa_of(o.get("circa"));
             d.literal = o.get("literal").and_then(string_of);
             d.raw = o.get("raw").and_then(string_of);
-            if d.start.is_none() {
-                if let Some(raw) = d.raw.clone().or_else(|| d.literal.clone()) {
-                    if let Some(parsed) = parse_date(&raw) {
-                        if parsed.start.is_some() {
-                            d.start = parsed.start;
-                            d.end = parsed.end;
-                            d.literal = None;
-                            d.raw = Some(raw);
+            for (k, raw) in o {
+                match k.as_str() {
+                    "date-parts" => {
+                        let mut canonical = Map::new();
+                        if let Some(start) = &d.start {
+                            let mut parts = vec![ymd_value(start)];
+                            if let Some(end) = &d.end {
+                                parts.push(ymd_value(end));
+                            }
+                            canonical.insert(k.clone(), Value::Array(parts));
+                        }
+                        if canonical.get(k) != Some(raw) {
+                            d.extra.insert(k.clone(), raw.clone());
                         }
                     }
+                    "circa" => {
+                        if raw != &Value::Bool(true) {
+                            d.extra.insert(k.clone(), raw.clone());
+                        }
+                    }
+                    "literal" | "raw" => keep_raw(&mut d.extra, k, raw),
+                    _ => {
+                        d.extra.insert(k.clone(), raw.clone());
+                    }
+                }
+            }
+            if d.start.is_none() {
+                // A date with no parts may still say its year in its text.
+                if let Some(parsed) = d
+                    .raw
+                    .as_deref()
+                    .or(d.literal.as_deref())
+                    .and_then(parse_date)
+                {
+                    d.start = parsed.start;
+                    d.end = parsed.end;
                 }
             }
             (d != Date::default()).then_some(d)
@@ -250,8 +394,19 @@ pub(crate) fn parse_date_value(v: &Value) -> Option<Date> {
     }
 }
 
-/// The CSL fields Pinakes reads as text.
-const KNOWN_TEXT: &[&str] = &[
+/// The members of a CSL name Pinakes types.
+const NAME_PARTS: &[&str] = &[
+    "family",
+    "given",
+    "non-dropping-particle",
+    "dropping-particle",
+    "suffix",
+    "literal",
+];
+
+/// The top-level members read as text into a typed slot, `id` included.
+const TYPED_TOP: &[&str] = &[
+    "id",
     "type",
     "citation-key",
     "citation_key",
@@ -359,7 +514,8 @@ pub fn from_value(
         ..Reference::default()
     };
     for (k, val) in o {
-        if KNOWN_TEXT.contains(&k.as_str())
+        if k != "id"
+            && TYPED_TOP.contains(&k.as_str())
             && !matches!(val, Value::String(_) | Value::Number(_) | Value::Null)
         {
             // CSL says these are strings. Keep the value as it came rather than guess.
@@ -378,6 +534,15 @@ pub fn from_value(
                     r.id
                 ),
             )));
+        }
+        if TYPED_TOP.contains(&k.as_str()) {
+            keep_raw(&mut r.extra, k, val);
+        } else if k == "keyword" {
+            // Kept only when the list would not write back as the same value.
+            let list = keyword_list(val);
+            if list.is_empty() || *val != Value::String(list.join(", ")) {
+                r.extra.insert(k.clone(), val.clone());
+            }
         }
         let s = || string_of(val);
         match k.as_str() {
@@ -406,29 +571,37 @@ pub fn from_value(
             "PMCID" | "pmcid" => r.pmcid = s(),
             "ISBN" | "isbn" => r.isbn = s(),
             "ISSN" | "issn" => r.issn = s(),
-            "keyword" => {
-                r.keywords = match val {
-                    Value::Array(a) => a.iter().filter_map(string_of).collect(),
-                    Value::String(s) => s
-                        .split([',', ';'])
-                        .filter_map(crate::text::non_empty)
-                        .collect(),
-                    _ => Vec::new(),
-                }
-            }
+            "keyword" => r.keywords = keyword_list(val),
             "author" | "editor" => {
                 let names: Vec<Name> = match val {
                     Value::Array(a) => a.iter().filter_map(parse_name_value).collect(),
                     other => parse_name_value(other).into_iter().collect(),
                 };
+                let whole = matches!(val, Value::Array(a) if a.len() == names.len()
+                    && a.iter().all(Value::is_object));
+                if !whole {
+                    // Some of it was not a name object: keep the member as it came, which the
+                    // writer puts back while the names are unchanged.
+                    r.extra.insert(k.clone(), val.clone());
+                }
                 if k == "author" {
                     r.author = names;
                 } else {
                     r.editor = names;
                 }
             }
-            "issued" => r.issued = parse_date_value(val),
-            "accessed" => r.accessed = parse_date_value(val),
+            "issued" | "accessed" => {
+                let d = parse_date_value(val);
+                if d.is_none() && !val.is_null() {
+                    // Nothing to read in it, but it is still the item's: write it back as it came.
+                    r.extra.insert(k.clone(), val.clone());
+                }
+                if k == "issued" {
+                    r.issued = d;
+                } else {
+                    r.accessed = d;
+                }
+            }
             "custom" => {
                 if let Value::Object(c) = val {
                     let mut rest = Map::new();

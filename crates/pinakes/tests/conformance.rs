@@ -88,8 +88,8 @@ fn kittum_web_of_science() {
 }
 
 #[test]
-fn kittum_team_lists() {
-    let lib = fixture("kittum/team_list.csv");
+fn kittum_own_lists() {
+    let lib = fixture("kittum/own_list.csv");
     assert_eq!(lib.references.len(), 3);
     assert_eq!(
         lib.references[0].doi.as_deref(),
@@ -100,7 +100,7 @@ fn kittum_team_lists() {
         3,
         "authors separated by semicolons"
     );
-    let cp1252 = fixture("kittum/team_list_cp1252.csv");
+    let cp1252 = fixture("kittum/own_list_cp1252.csv");
     assert_eq!(
         cp1252.references[0].title.as_deref(),
         Some("Nachtfalter an Straßenlaternen in München")
@@ -330,7 +330,12 @@ fn siglum_bibtex() {
         Some("International Astronomical Society"),
         "braces keep a name whole"
     );
-    assert_eq!(first.len(), 4, "\"and others\" is not a name");
+    assert_eq!(first.len(), 5);
+    assert_eq!(
+        first[4],
+        pinakes::Name::others(),
+        "\"and others\" is kept as the others marker"
+    );
     let beethoven = &names.references[1].author[0];
     assert_eq!(
         (beethoven.particle.as_deref(), beethoven.family.as_deref()),

@@ -136,17 +136,18 @@ impl Format {
             return Some(Format::WosTab);
         }
         let lines: Vec<&str> = start.lines().take(200).collect();
-        if lines.iter().any(|l| l.starts_with("PMID-")) {
-            return Some(Format::Medline);
-        }
-        if lines
-            .iter()
-            .any(|l| ris::tag_line(l).is_some_and(|(t, _)| t.eq_ignore_ascii_case("TY")))
-        {
-            return Some(Format::Ris);
-        }
-        if lines.iter().any(|l| is_bib_entry(l.trim_start())) {
-            return Some(Format::Bibtex);
+        // The first line that starts a record decides: a later one may be text inside a field
+        // (an abstract quoting "TY  - JOUR", a note holding "@article{").
+        for l in &lines {
+            if l.starts_with("PMID-") {
+                return Some(Format::Medline);
+            }
+            if ris::tag_line(l).is_some_and(|(t, _)| t.eq_ignore_ascii_case("TY")) {
+                return Some(Format::Ris);
+            }
+            if is_bib_entry(l.trim_start()) {
+                return Some(Format::Bibtex);
+            }
         }
         if lines.iter().filter(|l| ris::tag_line(l).is_some()).count() >= 2 {
             return Some(Format::Ris);

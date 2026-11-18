@@ -58,11 +58,11 @@ a single object.
 ## kittum
 
 kittum's importer read RIS from Ovid, CENTRAL, PubMed and Scopus, MEDLINE `.nbib`, PubMed XML,
-Web of Science plain text and tab-delimited files, Scopus CSV, team CSV and Excel lists. Its
+Web of Science plain text and tab-delimited files, Scopus CSV, and CSV and Excel lists kept by hand. Its
 duplicate finder proposed pairs from identifiers and titles.
 
 Pinakes reads what kittum read from these: `CN`, `BTI`, `GP`, `CA`, `EA` and `UT`; the
-Scopus placeholder "[No abstract available]", which is dropped; the team CSV in cp1252; Web of
+Scopus placeholder "[No abstract available]", which is dropped; a hand-kept CSV list in cp1252; Web of
 Science files in UTF-16; correction and retraction notices; and preprints (`PPR:` IDs and
 preprint DOI prefixes) together with their journal versions. Its title folding, its tokens that
 tell two titles apart (an acronym with a number, a phase, a follow-up time, a study number) and
@@ -76,6 +76,7 @@ its thresholds (90 with the year or first author, 98 alone) are kept. The tests 
 | Registry CSV exports | read | **Kept** out. They list studies, not publications. |
 | Refusals (raising an error) | raised | **Kept** differently. Each one is a diagnostic with a line where there is one: `format.binary`, `format.mismatch`, `wos.missing-ef`, `csv.no-title-column`, `id.pmcid-as-pmid`. The caller decides whether an error stops the import. |
 | Record ID from `AN`, `ID` or the DOI | made | **Kept.** As with nisaba, the record keeps its own ID, and the caller chooses a stable scheme. |
-| Paragraph breaks in abstracts, written as BibTeX | kept | **Kept** with a loss. BibTeX has no paragraph break that survives every tool, so the BibTeX writer joins paragraphs with a space. CSL-JSON, RIS and Hayagriva keep them. |
+| Paragraph breaks in abstracts, written as BibTeX | kept | **Fixed.** The BibTeX writer writes a paragraph break as `\par` and a line break as `\newline`, and the reader reads them back. |
 | CENTRAL database name | "Cochrane Central Register of Controlled Trials" | Already the same. The name is kept as exported. |
-| Comparing every pair | every pair | **Kept** for inputs of up to 2000 records. Above that, Pinakes compares only records that share a block, and `blocking_finds_what_exhaustive_finds` checks that this finds the same candidates. See `DESIGN.md`. |
+| Comparing every pair | every pair | **Fixed** in what it finds, not in how. Pinakes finds exactly the pairs that comparing every pair finds, at any size, without comparing every pair: it compares only pairs that the rules could accept, and skips the others by conditions each rule needs. `candidates_are_what_exhaustive_finds` and `generated_pairs_lose_nothing_and_order_does_not_matter` check this. See `DESIGN.md`. |
+| Related records that are not the same publication | `same_record`, `same_report` and `same_study` proposals for a person to confirm | **Kept** differently. Pinakes leaves reports and studies to the application. A notice and its article, or a preprint and its journal version, are candidates with the relation `notice` or `version`, and so are a comment or reply and its article (`comment`), a chapter and its book (`part`), and one work in two languages (`translation`). Only `duplicate` pairs join groups, so a retraction is never merged into the paper it retracts. |

@@ -170,9 +170,14 @@ fn passthrough(cmd: &str) -> bool {
     )
 }
 
+/// Groups nest at most this deep before their contents are kept as plain text, so input
+/// cannot make the converter recurse without bound.
+const MAX_DEPTH: usize = 64;
+
 struct Parser<'a> {
     s: &'a [char],
     i: usize,
+    depth: usize,
 }
 
 impl Parser<'_> {
@@ -206,7 +211,10 @@ impl Parser<'_> {
                 }
                 let end = self.i.saturating_sub(1).max(start).min(self.s.len());
                 let inner: String = self.s[start..end].iter().collect();
-                convert(&inner)
+                if self.depth >= MAX_DEPTH {
+                    return inner.chars().filter(|c| !matches!(c, '{' | '}')).collect();
+                }
+                convert_at(&inner, self.depth + 1)
             }
             Some('\\') => {
                 // \"\i, \'{\i}
@@ -216,7 +224,7 @@ impl Parser<'_> {
                     self.i += 1;
                 }
                 let inner: String = self.s[start..self.i].iter().collect();
-                convert(&inner)
+                convert_at(&inner, MAX_DEPTH)
             }
             Some(&c) => {
                 self.i += 1;
@@ -246,8 +254,16 @@ fn with_accent(base: String, mark: char) -> String {
 }
 
 fn convert(src: &str) -> String {
+    convert_at(src, 0)
+}
+
+fn convert_at(src: &str, depth: usize) -> String {
     let chars: Vec<char> = src.chars().collect();
-    let mut p = Parser { s: &chars, i: 0 };
+    let mut p = Parser {
+        s: &chars,
+        i: 0,
+        depth,
+    };
     let mut out = String::with_capacity(src.len());
     let mut math = false;
     while p.i < chars.len() {
@@ -332,6 +348,10 @@ fn convert(src: &str) -> String {
                         "-" | "/" => {}
                         other => out.push_str(other),
                     }
+                } else if name == "par" {
+                    out.push_str("\u{0}\u{0}");
+                } else if name == "newline" {
+                    out.push('\u{0}');
                 } else if passthrough(&name) {
                     if name == "href" {
                         let _url = p.argument();
@@ -362,11 +382,24 @@ fn convert(src: &str) -> String {
 /// dropped, whitespace squashed.
 pub fn latex_to_text(s: &str) -> String {
     if !s.contains(['\\', '{', '}', '~', '$', '-', '`', '\'', '%']) {
-        return crate::text::squash(s);
+        return crate::text::clean_line(s);
     }
-    let converted = convert(s);
-    let squashed: String = crate::text::squash(&converted.replace('\u{00A0}', " "));
-    squashed.nfc().collect()
+    crate::text::clean_line(&convert(s).replace(['\u{00A0}', '\u{0}'], " "))
+}
+
+/// LaTeX to text that may hold paragraphs: as [`latex_to_text`], with `\par` and blank
+/// lines as paragraph breaks and `\newline` as a line break.
+pub fn latex_to_lines(s: &str) -> String {
+    let mut paragraphs: Vec<String> = Vec::new();
+    for block in s.split("\n\n") {
+        let block = block.trim();
+        if block.trim_matches(['\n', ' ', '\t']).is_empty() {
+            continue;
+        }
+        let converted = convert(block).replace('\u{00A0}', " ");
+        paragraphs.push(converted.replace('\u{0}', "\n"));
+    }
+    crate::text::clean_lines(&paragraphs.join("\n\n"))
 }
 
 fn reverse_accent(mark: char) -> Option<&'static str> {
@@ -405,12 +438,12 @@ fn reverse_symbol(c: char) -> Option<&'static str> {
         'ı' => "{\\i}",
         'ð' => "{\\dh}",
         'þ' => "{\\th}",
-        '–' => "--",
-        '—' => "---",
-        '‘' => "`",
-        '’' => "'",
-        '“' => "``",
-        '”' => "''",
+        '–' => "{--}",
+        '—' => "{---}",
+        '‘' => "\\textquoteleft{}",
+        '’' => "\\textquoteright{}",
+        '“' => "{``}",
+        '”' => "{''}",
         '…' => "\\ldots{}",
         '§' => "\\S{}",
         '©' => "\\textcopyright{}",
@@ -428,7 +461,7 @@ fn reverse_symbol(c: char) -> Option<&'static str> {
         'δ' => "$\\delta$",
         'κ' => "$\\kappa$",
         'λ' => "$\\lambda$",
-        'μ' | 'µ' => "$\\mu$",
+        'μ' => "$\\mu$",
         'π' => "$\\pi$",
         'σ' => "$\\sigma$",
         'ω' => "$\\omega$",
@@ -441,10 +474,23 @@ fn reverse_symbol(c: char) -> Option<&'static str> {
 /// with capitals after the first letter (acronyms, "iPhone") in braces so styles keep their
 /// case.
 pub fn text_to_latex(s: &str, ascii: bool, protect: bool) -> String {
+    // BibTeX reads any run of white space as one space, so a line break is written as
+    // `\newline` and a paragraph break as `\par`; the value itself stays on one line.
+    let lines = crate::text::clean_lines(s);
+    let mut flat = String::with_capacity(lines.len());
+    for (i, para) in lines.split("\n\n").enumerate() {
+        if i > 0 {
+            flat.push_str(" \u{1}par ");
+        }
+        for (j, line) in para.split('\n').enumerate() {
+            if j > 0 {
+                flat.push_str(" \u{1}newline ");
+            }
+            flat.push_str(line);
+        }
+    }
+    let s = html_to_latex(&flat);
     let mut out = String::with_capacity(s.len() + 8);
-    // BibTeX reads any run of white space, line breaks included, as one space; write it so,
-    // so that reading back is stable.
-    let s = html_to_latex(&crate::text::squash(&s.replace(['\r', '\n'], " ")));
     let words = split_keep(&s);
     for w in words {
         let needs_protect = protect
@@ -453,13 +499,15 @@ pub fn text_to_latex(s: &str, ascii: bool, protect: bool) -> String {
                 .skip(1)
                 .any(|c| c.is_uppercase())
             && w.chars().any(|c| c.is_alphabetic())
-            && !w.contains(['\\', '\u{1}']);
+            && !w.contains('\u{1}');
         if needs_protect {
             out.push('{');
         }
-        for c in w.chars() {
+        let chars: Vec<char> = w.chars().collect();
+        for (i, &c) in chars.iter().enumerate() {
+            let next = chars.get(i + 1).copied();
             match c {
-                '&' | '%' | '$' | '#' | '_' if !w.starts_with('\\') => {
+                '&' | '%' | '$' | '#' | '_' => {
                     out.push('\\');
                     out.push(c);
                 }
@@ -472,6 +520,12 @@ pub fn text_to_latex(s: &str, ascii: bool, protect: bool) -> String {
                 '\\' => out.push_str("\\textbackslash{}"),
                 '~' => out.push_str("\\textasciitilde{}"),
                 '^' => out.push_str("\\textasciicircum{}"),
+                // `--`, ``` `` ``` and `''` are ligatures to LaTeX; an empty group keeps the
+                // characters apart.
+                '-' | '`' | '\'' if next == Some(c) => {
+                    out.push(c);
+                    out.push_str("{}");
+                }
                 c if ascii && !c.is_ascii() => out.push_str(&encode_char(c)),
                 c => out.push(c),
             }
@@ -507,16 +561,18 @@ fn encode_char(c: char) -> String {
 
 /// Turn CSL HTML into LaTeX commands, marking LaTeX syntax with control characters so the
 /// escaping pass leaves it alone: \u{1} is a backslash, \u{2} and \u{3} braces.
+///
+/// Tags pair as HTML nests them. A tag left open inside another pair, a close tag with no
+/// open one and a tag never closed are written as the text they are. One pass with a stack,
+/// so the time is linear however deep the tags nest.
 fn html_to_latex(s: &str) -> String {
     if !s.contains('<') {
         return s.to_string();
     }
-    let mut out = s.to_string();
-    for (open, close, cmd) in [
+    // Only the markup that the reader turns back into the same HTML.
+    const TAGS: [(&str, &str, &str); 5] = [
         ("<i>", "</i>", "textit"),
-        ("<em>", "</em>", "emph"),
         ("<b>", "</b>", "textbf"),
-        ("<strong>", "</strong>", "textbf"),
         ("<sup>", "</sup>", "textsuperscript"),
         ("<sub>", "</sub>", "textsubscript"),
         (
@@ -524,22 +580,59 @@ fn html_to_latex(s: &str) -> String {
             "</span>",
             "textsc",
         ),
-        ("<span class=\"nocase\">", "</span>", ""),
-    ] {
-        while let Some(a) = out.find(open) {
-            let Some(rel) = out[a + open.len()..].find(close) else {
-                break;
-            };
-            let b = a + open.len() + rel;
-            let inner = out[a + open.len()..b].to_string();
-            let replacement = if cmd.is_empty() {
-                format!("\u{2}{inner}\u{3}")
+    ];
+    // Tags found, in order: (start, end, kind, is_open, paired).
+    let mut tags: Vec<(usize, usize, usize, bool, bool)> = Vec::new();
+    // Indexes into `tags` of the open tags not yet closed, and how many of each kind.
+    let mut open: Vec<usize> = Vec::new();
+    let mut open_of = [0usize; TAGS.len()];
+    for (at, _) in s.match_indices('<') {
+        let rest = &s[at..];
+        let Some((kind, is_open, len)) = TAGS.iter().enumerate().find_map(|(k, (o, c, _))| {
+            if rest.starts_with(o) {
+                Some((k, true, o.len()))
+            } else if rest.starts_with(c) {
+                Some((k, false, c.len()))
             } else {
-                format!("\u{1}{cmd}\u{2}{inner}\u{3}")
-            };
-            out.replace_range(a..b + close.len(), &replacement);
+                None
+            }
+        }) else {
+            continue;
+        };
+        let t = tags.len();
+        tags.push((at, at + len, kind, is_open, false));
+        if is_open {
+            open.push(t);
+            open_of[kind] += 1;
+        } else if open_of[kind] > 0 {
+            // Tags opened inside this pair and not closed in it stay text.
+            while let Some(o) = open.pop() {
+                open_of[tags[o].2] -= 1;
+                if tags[o].2 == kind {
+                    tags[o].4 = true;
+                    tags[t].4 = true;
+                    break;
+                }
+            }
         }
     }
+    let mut out = String::with_capacity(s.len());
+    let mut from = 0;
+    for &(start, end, kind, is_open, paired) in &tags {
+        if !paired {
+            continue;
+        }
+        out.push_str(&s[from..start]);
+        if is_open {
+            out.push('\u{1}');
+            out.push_str(TAGS[kind].2);
+            out.push('\u{2}');
+        } else {
+            out.push('\u{3}');
+        }
+        from = end;
+    }
+    out.push_str(&s[from..]);
     out
 }
 
@@ -572,6 +665,20 @@ fn split_keep(s: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn html_pairs_nest_and_strays_stay_text() {
+        let m = |s: &str| {
+            html_to_latex(s)
+                .replace('\u{1}', "\\")
+                .replace('\u{2}', "{")
+                .replace('\u{3}', "}")
+        };
+        assert_eq!(m("<i>a<i>b</i>c</i>"), "\\textit{a\\textit{b}c}");
+        assert_eq!(m("<i>a<b>b</i>c</b>"), "\\textit{a<b>b}c</b>");
+        assert_eq!(m("x</i><sup>2</sup><i>y"), "x</i>\\textsuperscript{2}<i>y");
+        assert_eq!(m("a<u>b</u>"), "a<u>b</u>");
+    }
 
     #[test]
     fn accents_and_symbols() {
@@ -614,6 +721,16 @@ mod tests {
             r"The {DNA} of \textit{Bombyx}"
         );
         assert_eq!(text_to_latex("ça", true, false), r"{\c{c}}a");
+    }
+
+    #[test]
+    fn deep_groups_do_not_recurse_without_bound() {
+        let n = 100_000;
+        let s = format!("{}x{}", "\\textit{".repeat(n), "}".repeat(n));
+        let t = latex_to_text(&s);
+        assert!(t.contains('x'));
+        let s = format!("{}x{}", "{".repeat(n), "}".repeat(n));
+        assert_eq!(latex_to_text(&s), "x");
     }
 
     #[test]

@@ -180,6 +180,17 @@ fn person(family: &str, given: Option<&str>, suffix: Option<&str>) -> Name {
 /// that is not in Vancouver form ("Smith JA") is an organisation, so it is kept whole.
 pub fn parse_ris_name(input: &str) -> Name {
     let s = crate::text::squash(input.trim().trim_end_matches([';', ',']));
+    // Names left out, as the RIS writer and EndNote write them.
+    if ["et al.", "et al", Name::OTHERS]
+        .iter()
+        .any(|m| s.eq_ignore_ascii_case(m))
+    {
+        return Name::others();
+    }
+    // "van der Berg," is a person with no given name, as Pinakes writes one.
+    if input.trim().trim_end_matches(';').ends_with(',') && !s.contains(',') && !s.is_empty() {
+        return person(&s, None, None);
+    }
     let words: Vec<&str> = s.split(' ').collect();
     if !s.contains(',')
         && words.len() > 1
@@ -381,5 +392,13 @@ mod tests {
             vec!["Smith, J.", "Doe, A."]
         );
         assert_eq!(split_name_list("Smith, Jane"), vec!["Smith, Jane"]);
+    }
+
+    #[test]
+    fn ris_marks_names_left_out() {
+        for s in ["et al.", "Et al", "others"] {
+            assert!(parse_ris_name(s).is_others(), "{s}");
+        }
+        assert!(!parse_ris_name("Others, Ann").is_others());
     }
 }

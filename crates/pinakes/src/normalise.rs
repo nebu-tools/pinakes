@@ -9,7 +9,15 @@ use crate::model::Reference;
 /// reported. Safe to run more than once.
 pub fn normalise(r: &mut Reference) -> Vec<Diagnostic> {
     let mut diags = Vec::new();
+    use crate::text::{clean_line, clean_lines};
+    let line = |field: &mut Option<String>| {
+        if let Some(v) = field {
+            let clean = clean_line(v);
+            *field = (!clean.is_empty()).then_some(clean);
+        }
+    };
     for field in [
+        &mut r.citation_key,
         &mut r.title,
         &mut r.title_short,
         &mut r.container_title,
@@ -20,13 +28,62 @@ pub fn normalise(r: &mut Reference) -> Vec<Diagnostic> {
         &mut r.volume,
         &mut r.issue,
         &mut r.number,
+        &mut r.page,
         &mut r.edition,
+        &mut r.genre,
+        &mut r.language,
+        &mut r.url,
+        &mut r.doi,
+        &mut r.pmid,
+        &mut r.pmcid,
+        &mut r.isbn,
+        &mut r.issn,
+        &mut r.arxiv,
+        &mut r.accession,
+        &mut r.database,
     ] {
+        line(field);
+    }
+    for field in [&mut r.abstract_text, &mut r.note] {
         if let Some(v) = field {
-            let squashed = crate::text::squash(v);
-            *field = (!squashed.is_empty()).then_some(squashed);
+            let clean = clean_lines(v);
+            *field = (!clean.is_empty()).then_some(clean);
         }
     }
+    for n in r.author.iter_mut().chain(r.editor.iter_mut()) {
+        for part in [
+            &mut n.family,
+            &mut n.given,
+            &mut n.particle,
+            &mut n.dropping_particle,
+            &mut n.suffix,
+            &mut n.literal,
+        ] {
+            line(part);
+        }
+    }
+    // A name with nothing left in it is no name.
+    r.author.retain(|n| !n.is_empty() || !n.extra.is_empty());
+    r.editor.retain(|n| !n.is_empty() || !n.extra.is_empty());
+    for d in [&mut r.issued, &mut r.accessed].into_iter().flatten() {
+        line(&mut d.literal);
+        line(&mut d.raw);
+    }
+    r.publication_types = r
+        .publication_types
+        .iter()
+        .map(|t| clean_line(t))
+        .filter(|t| !t.is_empty())
+        .collect();
+    // Keywords are a set of single terms: every format but CSL-JSON separates them with
+    // commas or semicolons, so a keyword cannot hold one.
+    r.keywords = r
+        .keywords
+        .iter()
+        .flat_map(|k| k.split([',', ';']))
+        .map(clean_line)
+        .filter(|k| !k.is_empty())
+        .collect();
     if let Some(p) = &r.page {
         let fixed = page_range(p);
         r.page = (!fixed.is_empty()).then_some(fixed);

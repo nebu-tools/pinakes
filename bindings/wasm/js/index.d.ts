@@ -16,6 +16,11 @@ export type FormatName =
 /** Formats Pinakes writes. */
 export type WritableFormat = "ris" | "bibtex" | "biblatex" | "csl-json" | "hayagriva";
 
+/**
+ * A CSL-JSON name. `{ literal: "others" }` stands for the names a list leaves out (BibTeX's
+ * `and others`, RIS's `et al.`). Members Pinakes does not model (`static-ordering`,
+ * `comma-suffix`, ...) are kept and written back.
+ */
 export interface CslName {
   family?: string;
   given?: string;
@@ -26,6 +31,7 @@ export interface CslName {
   [field: string]: unknown;
 }
 
+/** A CSL-JSON date. Members Pinakes does not model are kept and written back. */
 export interface CslDate {
   "date-parts"?: (number | string)[][];
   literal?: string;
@@ -99,11 +105,22 @@ export type Reason =
   | { kind: "year"; year: number; text: string }
   | { kind: "first-author"; family: string; text: string };
 
+/**
+ * How two records relate. Only `duplicate` joins records into groups; the others are shown so
+ * the caller can decide.
+ * - `version`: a preprint and its journal version.
+ * - `notice`: a correction, retraction or expression of concern and the record it is about.
+ * - `comment`: a comment, letter or reply and the article it answers.
+ * - `part`: a chapter or conference paper and the book or proceedings that holds it.
+ * - `translation`: the same work in two languages.
+ */
+export type Relation = "duplicate" | "version" | "notice" | "comment" | "part" | "translation";
+
 export interface Candidate {
   /** Index of the first record; `a < b`. */
   a: number;
   b: number;
-  relation: "duplicate" | "version" | "notice";
+  relation: Relation;
   /** 100 for an identifier match, otherwise the title similarity. */
   score: number;
   /** Whether an identifier alone made this a duplicate. */

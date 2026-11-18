@@ -18,6 +18,7 @@ from each of them, and why.
 | `bindings/python` | A Python extension module built with PyO3 and maturin. |
 | `fixtures` | Every input the old implementations tested, cleaned, plus hand-written hard cases, and what Pinakes reads from each. |
 | `bench` | The script that times kittum on the benchmark file. The benchmark itself is `crates/pinakes/examples/bench.rs`. |
+| `fuzz` | cargo-fuzz targets: one per reader, and one that writes what it read and reads it again. A separate workspace on nightly Rust. |
 
 The bindings are thin. Each one passes CSL-JSON text into the library and JSON text out, and
 the host language parses it. A reference therefore has the same shape in every language: it is
@@ -41,13 +42,24 @@ Zotero and Pandoc write it, and its field names have one documented meaning.
   RIS `M1` or a BibTeX `owner`, in source order and with repeats. A writer for the same format
   writes them back. Other writers drop them, because no other format has a place for them.
 
-Writers lose only what the target format cannot hold. BibTeX has no paragraph break, so the
-BibTeX writer joins an abstract's paragraphs. RIS has no particle field, so "van der Berg"
-goes into the family name. The round-trip test in `crates/pinakes/tests/robustness.rs` reads
-every fixture and writes it again. Through CSL-JSON every record comes back unchanged, unknown
-fields included. Through RIS, BibTeX and BibLaTeX the title, authors, year, DOI, container,
-volume and pages come back unchanged, and writing the result a second time gives the same
-text.
+Writers lose only what the target format cannot hold, and no value breaks a writer's framing.
+`crates/pinakes/tests/writers.rs` checks both with proptest. Any reference, with any text in
+any field (braces, `@`, `ER  - ` lines, backslashes, control characters), writes as exactly
+one record that reads back without an error, and Hayagriva's own parser accepts the YAML. A
+reference in normal form (as `normalise` leaves it) reads back with every text field the
+format holds unchanged, except for these, which the formats cannot hold:
+
+| Format | Not held |
+| --- | --- |
+| RIS | Name parts. A name is one line, `Family, Given, Suffix`, and the reader reads it as exports write names (Vancouver initials, a trailing `;`). Every name survives, and a second pass gives the same names; a name of nothing but commas and semicolons is lost. A genre of up to eight digits is read back from `M3` as a PMID, as PubMed-derived exports mean it. |
+| BibTeX | A thesis with no genre: `@phdthesis` implies "PhD thesis". A particle is told from the family name only by its lower case. |
+| BibLaTeX | A particle, as in BibTeX. |
+| Hayagriva | Markup in titles and abstracts, and fields Hayagriva has no key for. |
+| CSL-JSON | Nothing. Any CSL-shaped object, with unknown members in the item, its names and its dates, reads and writes back as it came. |
+
+BibTeX holds line and paragraph breaks as `\newline` and `\par`. Through CSL-JSON every
+record from every fixture comes back unchanged, unknown fields included
+(`crates/pinakes/tests/robustness.rs`).
 
 ## Entry points
 
@@ -102,6 +114,25 @@ dialect's tags (`T1` and `TI`, `A1` and `AU`, `JF`, `JO` and `T2`, `Y1` and `PY`
 database provider) and its habits: dates like `2019///`, DOIs given as URLs, `M3` holding a
 PMID, wrapped lines, lower-case tags, a missing final `ER`. The dialect hard cases are in
 `fixtures/hard/ris/`.
+
+BibLaTeX entries inherit fields from others, and the BibTeX reader resolves this as biber
+does before it makes references:
+
+- `xdata` copies every field of the named `@xdata` entries that the entry does not have. It
+  is resolved first, through chains of `xdata`. The `@xdata` entries themselves are not
+  records and are dropped after resolving.
+- `crossref` copies the parent's fields that the child does not have, in order of field
+  name, with BibLaTeX's mappings: a `@proceedings` title becomes an `@inproceedings`
+  `booktitle`, an `@mvbook` title a `maintitle`, a `@periodical` title a `journaltitle`, and
+  a `@book` author also a `bookauthor`. Fields such as `ids`, `crossref`, `label` and
+  `shorthand` are never inherited.
+- `xref` names a parent and inherits nothing.
+- A field the entry has is never overwritten. A parent that is not in the file gives
+  `bibtex.missing-parent`. One found only with different case gives `bibtex.parent-case` and
+  is used. An `xdata` that names an entry of another type gives `bibtex.xdata-not-xdata`. A
+  chain that leads back to an entry gives the error `bibtex.inheritance-cycle`, and that link
+  is not followed. Resolution walks the chains with its own stack, so a chain of any length
+  cannot overflow the call stack.
 
 ### Write
 
@@ -160,19 +191,54 @@ The rules are kittum's:
    titles score at least 90 for similarity and the year or first author agrees, or if they
    score at least 98 alone. The score is rapidfuzz's `token_sort_ratio`.
 
-A pair where one record is a correction or retraction notice, or where one is a preprint and
-the other its journal version, is a candidate with the relation `notice` or `version`. Groups
-never hold two different DOIs, PMIDs or PMCIDs.
+Only identifiers that the `id` module accepts count. A PMID "bad123" is no PMID.
 
-kittum compares every pair of records. That takes days for 100,000 records. Pinakes compares
-every pair up to 2,000 records. Above that, it puts the records in blocks: records that share
-an identifier, the whole title, one of their three rarest title words, their two rarest words
-together, or first author and year. It compares every pair that shares an identifier. In every
-other block, it sorts the records by title and compares each record with the 16 after it. A
-test checks that this finds the same candidates as comparing every pair, on an input above the
-limit: every pair that the full comparison accepts must be among the pairs compared. The
-input mixes random titles from a small vocabulary with copies that have a typo, a word dropped
-or moved, a change of case or punctuation, the year one off, or no author.
+A candidate is a `duplicate` only when nothing says the two records are different
+publications. Five other relations are candidates too, so the caller can see them, but they
+never join a group:
+
+| Relation | The pair |
+| --- | --- |
+| `version` | A preprint and its journal version. |
+| `notice` | A correction, erratum, retraction or expression of concern and the record it is about. |
+| `comment` | A comment, letter or reply and the article it answers. |
+| `part` | A chapter or conference paper and the book or proceedings that holds it. |
+| `translation` | The same work in two languages: both records give a language, and the languages differ. |
+
+"Part I" and "Part II" of one title are not a candidate at all: part numbers are tokens that
+tell titles apart, as phases and study numbers are. Groups never hold two different DOIs,
+PMIDs or PMCIDs.
+
+#### What is compared
+
+The result is exactly the one that comparing every pair gives, for any number of records, and
+it does not depend on the order of the input. kittum compares every pair, which for 100,000
+records means 5 × 10⁹ comparisons. Pinakes generates a set of pairs that provably holds every
+pair the rules can accept, and compares only those:
+
+- every pair that shares an identifier;
+- of the rest, only pairs that rule 1 leaves to the titles (no identifier kind on both
+  records), and that rule 2 allows: the same first author or one missing, and years at most
+  one apart or one missing. Records are put in buckets by first author and year, and only
+  buckets that can agree are joined;
+- within the joined buckets, only pairs whose titles can reach the score the pair needs: 90
+  where the first author or year can agree, 98 where neither can. A token-sort ratio of `t`
+  needs `2·min(la, lb) ≥ t/100·(la + lb)` for title lengths `la` and `lb`. And because the
+  longest common subsequence holds no more of any character than either title does, it needs
+  the L1 distance between the titles' character counts to be at most
+  `(1 − t/100)·(la + lb)`.
+
+Each condition follows from the rules or from the score's definition, so no pair that the
+rules accept is skipped. Two tests compare the result with the exhaustive comparison:
+`candidates_are_what_exhaustive_finds` on 2,300 records built to defeat blocking (random
+titles from a small vocabulary, and copies with a typo, a word dropped or moved, a change of
+case or punctuation, the year one off, or no author), and the proptest
+`generated_pairs_lose_nothing_and_order_does_not_matter`, which also shuffles the input.
+Duplicates are joined into groups in an order fixed by the records' content (identifier
+matches first, then by score, then by content), so a permutation of the input permutes the
+result and changes nothing else.
+
+The work is spread over the machine's cores with scoped threads, except in WebAssembly.
 
 ## Diagnostics
 
@@ -196,13 +262,25 @@ Readers never panic, and they never drop input without saying so. Every problem 
 `Library::has_errors` tells the caller whether anything was skipped. The CLI exits with
 status 1 when it was.
 
-Two kinds of test check this:
+These check it:
 
 - `crates/pinakes/tests/robustness.rs` uses proptest. It gives every reader random bytes,
   text shaped like each format, and fixtures cut short or with a byte changed, and checks that
   no reader panics.
+- `fuzz/` holds cargo-fuzz targets: one for each reader, and `round_trip`, which reads with
+  any reader and checks that every writer's output reads back as the same number of records.
+  Run one with `cargo +nightly fuzz run read_ris` from `fuzz/`.
+- `crates/pinakes/tests/depth.rs` gives every reader input nested 50,000 deep (braces, CSL
+  HTML, LaTeX commands, XML elements, JSON arrays) and every writer a record nested 10,000
+  deep, on a thread with a 1 MiB stack, so recursion per level of nesting would overflow.
 - `fixtures/expected/` holds the full diagnostics for every fixture, so a change in what is
   reported shows in review.
+
+Nesting is bounded everywhere. XML elements nest at most 256 deep; deeper tags are dropped
+and their text kept, with `xml.too-deep`. JSON nests at most 128 deep, serde_json's limit,
+and a deeper file is the error `csl.bad-json`. LaTeX command arguments are converted at most
+64 deep, and deeper ones are kept as their text. Each level copies its argument once, so the
+time is at most 64 times the length. Everything else is read with loops, not recursion.
 
 ## WebAssembly and Python
 
@@ -248,28 +326,36 @@ crates are dev-dependencies only.
 
 ## Performance
 
-`crates/pinakes/examples/bench.rs` writes a RIS file with 100,000 records in three dialects.
+`crates/pinakes/examples/bench.rs` writes a RIS file of generated records in three dialects.
 One record in twenty is a copy of an earlier one. Half of the copies keep the DOI. The other
 half have no identifier, so only their titles can match. The example then times `read` and
-`find_duplicates`. `bench/kittum.py` times kittum on the same file.
+`find_duplicates`, and reports the peak memory. `bench N` sets the number of records, and
+`bench N path adversarial` adds 20,000 records chosen to defeat candidate generation: 10,000
+titled "Editorial", by the same few authors over the same years, a tenth without an author or
+year; and 10,000 conference abstracts whose titles differ only in an abstract number, a week
+count and one word, so every pair scores above 90 and the rules must turn most of them away.
+`bench/kittum.py` times kittum on the same file.
 
-| Task | Pinakes | kittum |
-| --- | --- | --- |
-| Read 10,000 records | 0.23 s | |
-| Find duplicates among 10,000 | 0.68 s | |
-| Read 100,000 records (35.2 MB) | 1.3 to 3.2 s | 6.6 s |
-| Find duplicates among the first 500 | 0.08 s (CLI) | 11 to 22 s |
-| Find duplicates among the first 1,000 | 0.14 s (CLI) | 42 s |
-| Find duplicates among 100,000 | 3.7 to 13.2 s | not run |
+| Records | Read | Find duplicates | Candidate pairs | Groups | Peak memory, read / after duplicates |
+| --- | --- | --- | --- | --- | --- |
+| 100,000 (35.2 MB) | 1.4 s | 0.4 s | 5,441 (1,842 by identifier) | 4,439 | 416 MB / 572 MB |
+| 100,000 + 20,000 adversarial | 1.6 s | 6.0 s | 2,055,090 | 4,440 | 483 MB / 1.21 GB |
+| 1,000,000 | 11.7 s | 4.7 s | 54,620 (18,014 by identifier) | 44,730 | 4.14 GB / 5.18 GB |
+| 1,000,000 + 20,000 adversarial | 11.6 s | 9.5 s | 2,105,463 | 44,731 | 4.21 GB / 5.54 GB |
 
-Pinakes finds 5,441 candidate pairs in the 100,000 records, 1,842 of them by identifier, and
-4,439 groups. kittum compares every pair of records, at about 80 to 210 µs a pair. For 100,000
-records that is about 5 × 10⁹ pairs, which would take days. On the first 500 records the
+Identical "Editorial" titles by the same author within a year of each other are candidates
+of each other by the rules, so the adversarial runs report about two million pairs. That is
+the answer that comparing every pair gives, and computing it costs what listing it costs. Before candidate
+generation was made exact, finding duplicates took 6.2 to 6.8 s for 100,000 records and 53 s
+for 1,000,000.
+
+kittum compares every pair of records, at about 80 to 210 µs a pair. It reads 100,000
+records in 6.6 s, and finds the duplicates among the first 500 in 11 to 22 s and among the
+first 1,000 in 42 s. For 100,000 records it would take days. On the first 500 records the
 groups that Pinakes and kittum find have the same members.
 
-The machine was a 12-core x86-64 Linux workstation with a load average of about 21 from other
-work, so times varied by up to three times between runs. Each range is the fastest and
-slowest of several runs of the release build.
+The machine was a 12-core x86-64 Linux workstation with a load average of 9 to 17 from other
+work, so times vary between runs. The times are of the release build.
 
 ## Out of scope
 

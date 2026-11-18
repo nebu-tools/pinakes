@@ -2,6 +2,7 @@
 //!
 //! ```sh
 //! cargo run --release -p pinakes --example bench -- 100000 fixtures/generated/bench.ris
+//! cargo run --release -p pinakes --example bench -- 100000 fixtures/generated/hard.ris adversarial
 //! ```
 //!
 //! The file is written once, then read from disk. One record in twenty is a copy of an earlier
@@ -10,6 +11,11 @@
 //! export dialects (EndNote, Ovid, Zotero). Titles are drawn from a fixed list of ecology and
 //! astronomy words and a long tail of made-up ones. The generator is seeded, so every run
 //! writes the same file.
+//!
+//! With `adversarial`, 20,000 records that defeat blocking are added: 10,000 titled
+//! "Editorial", by the same few authors over the same years, a tenth without an author or year;
+//! and 10,000 conference abstracts whose titles differ only in an abstract number, a week count
+//! and one word, so every pair scores above 90 and the rules must turn most of them away.
 
 use std::fmt::Write as _;
 use std::time::Instant;
@@ -205,6 +211,50 @@ fn write_record(out: &mut String, r: &Rec, dialect: u64, rng: &mut Rng) {
     let _ = writeln!(out, "ER  - \n");
 }
 
+fn adversarial(out: &mut String, rng: &mut Rng) {
+    for i in 0..10_000u64 {
+        let rec = Rec {
+            title: "Editorial".into(),
+            authors: if i % 10 == 0 {
+                vec![]
+            } else {
+                vec![format!("{}, {}", rng.pick(FAMILIES), rng.pick(GIVEN))]
+            },
+            year: 1990 + (rng.next() % 35) as u32,
+            journal: rng.pick(JOURNALS),
+            doi: None,
+            an: None,
+        };
+        let mut text = String::new();
+        write_record(&mut text, &rec, rng.next() % 3, rng);
+        if i % 10 == 5 {
+            // No year either.
+            text = text
+                .lines()
+                .filter(|l| !l.starts_with("PY") && !l.starts_with("Y1") && !l.starts_with("DA"))
+                .map(|l| format!("{l}\n"))
+                .collect();
+        }
+        out.push_str(&text);
+    }
+    for i in 0..10_000u64 {
+        let rec = Rec {
+            title: format!(
+                "Abstract {}: outcomes of {} counts at the forest edge in a {}-week field survey",
+                1000 + i,
+                rng.pick(WORDS),
+                4 + rng.next() % 3 * 4
+            ),
+            authors: vec![format!("{}, {}", rng.pick(FAMILIES), rng.pick(GIVEN))],
+            year: 2020 + (rng.next() % 2) as u32,
+            journal: "Annals of Small Bodies",
+            doi: None,
+            an: None,
+        };
+        write_record(out, &rec, rng.next() % 3, rng);
+    }
+}
+
 fn generate(n: usize) -> (String, usize) {
     let mut rng = Rng(0x9e37_79b9_7f4a_7c15);
     let mut made: Vec<Rec> = Vec::with_capacity(n);
@@ -243,6 +293,9 @@ fn generate(n: usize) -> (String, usize) {
         write_record(&mut out, &rec, rng.next() % 3, &mut rng);
         made.push(rec);
     }
+    if std::env::args().nth(3).as_deref() == Some("adversarial") {
+        adversarial(&mut out, &mut rng);
+    }
     (out, copies)
 }
 
@@ -261,11 +314,14 @@ fn main() {
         "wrote {path}: {n} records, {copies} copies, {:.1} MB",
         text.len() as f64 / 1e6
     );
+    drop(text);
 
     let bytes = std::fs::read(&path).expect("read the RIS file back");
     let t = Instant::now();
     let lib = pinakes::read(&bytes, None);
     let read_time = t.elapsed();
+    drop(bytes);
+    let after_read = peak();
     let t = Instant::now();
     let dups = pinakes::find_duplicates(&lib.references);
     let dedupe_time = t.elapsed();
@@ -282,4 +338,19 @@ fn main() {
         dups.pairs.len(),
         dups.groups.len()
     );
+    if let (Some(read), Some(all)) = (after_read, peak()) {
+        println!("peak     {read} kB after reading, {all} kB after deduplicating");
+    }
+}
+
+/// The process's peak resident memory in kB, where the system reports it (Linux).
+fn peak() -> Option<u64> {
+    let status = std::fs::read_to_string("/proc/self/status").ok()?;
+    let line = status.lines().find(|l| l.starts_with("VmHWM:"))?;
+    line.trim_start_matches("VmHWM:")
+        .trim()
+        .trim_end_matches("kB")
+        .trim()
+        .parse()
+        .ok()
 }

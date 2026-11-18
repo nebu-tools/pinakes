@@ -60,7 +60,7 @@ jobs:
           wasm=bindings/wasm/pkg/pinakes_wasm_bg.wasm
           echo "raw $(wc -c < "$wasm") bytes, gzip $(gzip -9 -c "$wasm" | wc -c) bytes"
       - working-directory: bindings/wasm
-        run: node --test test/
+        run: node --test test/*.test.js
       - working-directory: bindings/wasm
         run: bun test
       - working-directory: bindings/wasm

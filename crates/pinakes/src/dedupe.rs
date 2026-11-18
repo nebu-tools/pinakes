@@ -4,23 +4,42 @@
 //!
 //! 1. The first identifier both records have decides, in the order DOI, PMID, PMCID. The same
 //!    value makes a candidate; different values mean two publications, whatever the titles say.
-//! 2. Without a shared identifier, two titles that both name a study acronym, phase, follow-up time or
-//!    study number, and name different ones, are different publications. So are records more
-//!    than a year apart, or with different first-author family names.
+//!    Only identifiers that [`crate::id`] accepts count: a PMID "bad123" is no PMID.
+//! 2. Without a shared identifier, two titles that both name a study acronym, phase, part,
+//!    follow-up time or study number, and name different ones, are different publications. So
+//!    are records more than a year apart, or with different first-author family names.
 //! 3. What is left is a candidate when the titles, folded, score at least 90 on token-sort
 //!    similarity and the year or first author agrees, or at least 98 on their own.
 //!
-//! A pair where one record is a correction or retraction notice, or a preprint and the other its
-//! journal version, is a candidate with that relation, so the caller can treat it differently.
-//! Groups are joined from the candidates, never so that one group holds two different DOIs,
-//! PMIDs or PMCIDs.
+//! A candidate is a [`Relation::Duplicate`] only when nothing says the two records are different
+//! publications. A correction or retraction notice and its article, a comment or reply and its
+//! article, a chapter and its book, the same work in two languages, and a preprint and its
+//! journal version are candidates with their own relation, so the caller can treat them
+//! differently; they never join a group. Groups are joined from the duplicates, never so that
+//! one group holds two different DOIs, PMIDs or PMCIDs.
 //!
-//! kittum compares every pair. Pinakes does too for small inputs. Above [`EXHAUSTIVE_LIMIT`]
-//! records it compares every pair that shares an identifier, and groups the rest into blocks:
-//! the whole title, each of the three rarest title words, the two rarest together, and first
-//! author with year. Within a block, in title order, each record is compared with the
-//! [`WINDOW`] records after it. Similar titles sort near each other, so this finds what
-//! comparing every pair finds, at a cost that grows with the input instead of its square.
+//! # Lossless candidate generation
+//!
+//! The result is the one comparing every pair gives, and it does not depend on the order of the
+//! input. Pinakes does not compare every pair; it generates a set of pairs that provably holds
+//! every pair the rules can accept, and compares those:
+//!
+//! - every pair that shares an identifier (exact-key buckets);
+//! - for the rest, only pairs that rule 1 leaves to the titles (no identifier kind on both),
+//!   that rule 2 allows (the same first author or one missing, years at most one apart or one
+//!   missing), split into buckets by those fields;
+//! - within the buckets, only titles whose lengths and character counts can reach the score the
+//!   pair needs: a token-sort ratio of at least `t` needs `2·min(la, lb) ≥ t/100·(la + lb)`, and,
+//!   since the longest common subsequence holds no more of a character than either title, an
+//!   L1 distance between the character-count vectors of at most `(1 − t/100)·(la + lb)`. Both
+//!   are necessary conditions of the score, so no candidate is lost. The score needed is 90
+//!   where the first author or year can agree, and 98 where neither can.
+//!
+//! Identical titles land in the same buckets only when the fields that must agree allow it, so
+//! many records with one title ("Editorial") cost what their genuine candidates cost.
+//! Duplicates are joined into groups in an order fixed by the records' content (identifier
+//! matches first, then by score, then by content), so a permutation of the input permutes the
+//! result and changes nothing else.
 
 use crate::id::IdKind;
 use crate::model::Reference;
@@ -29,14 +48,8 @@ use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 use unicode_normalization::UnicodeNormalization;
 
-/// Inputs up to this size are compared pair by pair.
-pub const EXHAUSTIVE_LIMIT: usize = 2000;
-
-/// Above [`EXHAUSTIVE_LIMIT`], records in a block are put in title order and each is compared
-/// with this many that follow it, so a block of up to `WINDOW + 1` records is compared in full.
-pub const WINDOW: usize = 16;
-
-/// How two records relate when they are a candidate.
+/// How two records relate when they are a candidate. Only [`Relation::Duplicate`] says they
+/// are the same publication, and only duplicates join groups.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Relation {
     /// The same publication.
@@ -45,6 +58,12 @@ pub enum Relation {
     Version,
     /// A correction, retraction or expression of concern and the record it is about.
     Notice,
+    /// A comment, letter or reply and the article it answers.
+    Comment,
+    /// A part and the whole that holds it: a chapter or conference paper and its book.
+    Part,
+    /// The same work in two languages: a translated edition, or an index's translated title.
+    Translation,
 }
 
 impl Relation {
@@ -53,6 +72,9 @@ impl Relation {
             Relation::Duplicate => "duplicate",
             Relation::Version => "version",
             Relation::Notice => "notice",
+            Relation::Comment => "comment",
+            Relation::Part => "part",
+            Relation::Translation => "translation",
         }
     }
 }
@@ -114,7 +136,8 @@ pub struct Group {
 /// The result of [`find_duplicates`].
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Duplicates {
-    /// Candidate pairs, ordered by `a` then `b`.
+    /// Candidate pairs, ordered by `a` then `b`. A duplicate that would have joined two
+    /// different identifiers into one group is left out.
     pub pairs: Vec<Candidate>,
     /// Groups of two or more records, ordered by their first member.
     pub groups: Vec<Group>,
@@ -131,18 +154,92 @@ struct Facts {
     author_shown: Option<String>,
     /// The title folded as kittum folds it, tokens sorted, as characters.
     sorted: Vec<char>,
-    words: Vec<String>,
     prepared: String,
     study_names: HashSet<String>,
     before_numbers: HashSet<String>,
+    /// The title's distinguishing tokens, found once.
+    tokens: Tokens,
     version: Version,
+    role: Role,
+    language: Option<String>,
+    /// Which identifier kinds the record has: DOI 1, PMID 2, PMCID 4.
+    mask: u8,
+    /// Character counts of `sorted`, bucketed and capped, for the count filter.
+    counts: [u8; COUNT_BUCKETS],
 }
 
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 enum Version {
     Article,
     Preprint,
     Notice,
+    Comment,
+}
+
+/// Whether a record is a part of something (a chapter), a whole (a book), or neither.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
+enum Role {
+    Other,
+    Part,
+    Whole,
+}
+
+fn role(kind: &str) -> Role {
+    match kind {
+        "chapter" | "entry" | "entry-encyclopedia" | "entry-dictionary" | "paper-conference" => {
+            Role::Part
+        }
+        "book" | "periodical" => Role::Whole,
+        _ => Role::Other,
+    }
+}
+
+/// A language as a two-letter code where it is one of the common ones, so "eng", "en-GB" and
+/// "English" agree.
+fn language(l: &str) -> Option<String> {
+    let l = l.trim().to_lowercase();
+    let base = l.split(['-', '_', ' ', ';', ',']).next().unwrap_or("");
+    if base.is_empty() {
+        return None;
+    }
+    let code = match base {
+        "en" | "eng" | "english" => "en",
+        "fr" | "fre" | "fra" | "french" | "français" | "francais" => "fr",
+        "de" | "ger" | "deu" | "german" | "deutsch" => "de",
+        "es" | "spa" | "spanish" | "español" | "espanol" => "es",
+        "it" | "ita" | "italian" | "italiano" => "it",
+        "pt" | "por" | "portuguese" | "português" | "portugues" => "pt",
+        "nl" | "dut" | "nld" | "dutch" => "nl",
+        "ru" | "rus" | "russian" => "ru",
+        "zh" | "chi" | "zho" | "chinese" => "zh",
+        "ja" | "jpn" | "japanese" => "ja",
+        "ko" | "kor" | "korean" => "ko",
+        "pl" | "pol" | "polish" => "pl",
+        "sv" | "swe" | "swedish" => "sv",
+        "no" | "nor" | "nb" | "nob" | "nn" | "nno" | "norwegian" => "no",
+        "da" | "dan" | "danish" => "da",
+        "fi" | "fin" | "finnish" => "fi",
+        "tr" | "tur" | "turkish" => "tr",
+        "ar" | "ara" | "arabic" => "ar",
+        "he" | "heb" | "hebrew" => "he",
+        "el" | "gre" | "ell" | "greek" => "el",
+        "cs" | "cze" | "ces" | "czech" => "cs",
+        "hu" | "hun" | "hungarian" => "hu",
+        other => other,
+    };
+    Some(code.to_string())
+}
+
+const COUNT_BUCKETS: usize = 64;
+
+/// The count-filter bucket of a title character: letters and digits each have their own.
+fn bucket(c: char) -> usize {
+    match c {
+        'a'..='z' => c as usize - 'a' as usize,
+        '0'..='9' => 26 + c as usize - '0' as usize,
+        ' ' => 36,
+        _ => 37 + c as usize % (COUNT_BUCKETS - 37),
+    }
 }
 
 const NOTICE_TYPES: &[&str] = &[
@@ -150,6 +247,37 @@ const NOTICE_TYPES: &[&str] = &[
     "correction",
     "retraction of publication",
     "expression of concern",
+];
+/// How the folded title of a notice starts, when its publication type does not say.
+const NOTICE_TITLES: &[&str] = &[
+    "erratum",
+    "errata",
+    "corrigendum",
+    "corrigenda",
+    "correction",
+    "retraction",
+    "retracted",
+    "notice of retraction",
+    "expression of concern",
+    "withdrawn",
+    "withdrawal",
+];
+/// How the folded title of a comment or reply starts.
+const COMMENT_TITLES: &[&str] = &[
+    "comment on",
+    "comments on",
+    "commentary on",
+    "reply",
+    "in reply",
+    "response to",
+    "in response",
+    "author reply",
+    "authors reply",
+    "author s reply",
+    "authors response",
+    "author s response",
+    "re ",
+    "letter to the editor",
 ];
 const PREPRINT_DOI_PREFIXES: &[&str] = &[
     "10.1101/",
@@ -162,7 +290,16 @@ const PREPRINT_DOI_PREFIXES: &[&str] = &[
     "10.22541/",
 ];
 
-fn version(r: &Reference) -> Version {
+fn starts_with_word(normal: &str, prefixes: &[&str]) -> bool {
+    prefixes.iter().any(|p| {
+        normal.starts_with(p)
+            && (p.ends_with(' ')
+                || normal[p.len()..].is_empty()
+                || normal[p.len()..].starts_with(' '))
+    })
+}
+
+fn version(r: &Reference, normal: &str) -> Version {
     let types: Vec<String> = r
         .publication_types
         .iter()
@@ -171,8 +308,14 @@ fn version(r: &Reference) -> Version {
     if types
         .iter()
         .any(|t| NOTICE_TYPES.iter().any(|n| t.contains(n)))
+        || starts_with_word(normal, NOTICE_TITLES)
     {
         return Version::Notice;
+    }
+    if types.iter().any(|t| t == "comment" || t == "comment on")
+        || starts_with_word(normal, COMMENT_TITLES)
+    {
+        return Version::Comment;
     }
     let preprint = types.iter().any(|t| t == "preprint")
         || r.id.to_ascii_uppercase().starts_with("PPR:")
@@ -196,8 +339,8 @@ fn is_word(c: char) -> bool {
 /// kittum's `normalize_title`: NFC, lower case, everything but word characters and spaces to a
 /// space, spaces collapsed.
 pub fn normalise_title(title: &str) -> String {
-    let t: String = crate::text::strip_markup(title)
-        .nfc()
+    let t: String = nfc(&crate::text::strip_markup(title))
+        .chars()
         .flat_map(char::to_lowercase)
         .map(|c| {
             if is_word(c) || c.is_whitespace() {
@@ -245,38 +388,38 @@ fn first_author(r: &Reference) -> Option<String> {
 fn facts(r: &Reference) -> Facts {
     let title = r.title.as_deref().unwrap_or("");
     let normal = normalise_title(title);
-    let mut words: Vec<String> = normal
-        .split(' ')
-        .filter(|w| !w.is_empty())
-        .map(str::to_string)
-        .collect();
-    words.sort();
+    let mut words: Vec<&str> = normal.split(' ').filter(|w| !w.is_empty()).collect();
+    words.sort_unstable();
     let sorted: Vec<char> = words.join(" ").chars().collect();
-    words.dedup();
     let prepared = prepare(title);
     let author_shown = first_author(r);
+    // Only identifiers that pass validation: "bad123" is not PMID 123.
+    let doi = r.doi.as_deref().and_then(crate::id::doi);
+    let pmid = r.pmid.as_deref().and_then(crate::id::pmid);
+    let pmcid = r.pmcid.as_deref().and_then(crate::id::pmcid);
+    let mask = doi.is_some() as u8 | (pmid.is_some() as u8) << 1 | (pmcid.is_some() as u8) << 2;
+    let mut counts = [0u8; COUNT_BUCKETS];
+    for c in &sorted {
+        let b = &mut counts[bucket(*c)];
+        *b = b.saturating_add(1);
+    }
     Facts {
-        doi: r.doi.as_deref().and_then(crate::id::doi),
-        pmid: r
-            .pmid
-            .as_deref()
-            .map(|p| p.chars().filter(char::is_ascii_digit).collect::<String>())
-            .filter(|p| !p.is_empty()),
-        pmcid: r
-            .pmcid
-            .as_deref()
-            .map(|p| p.chars().filter(char::is_ascii_digit).collect::<String>())
-            .filter(|p| !p.is_empty())
-            .map(|d| format!("PMC{d}")),
+        doi,
+        pmid,
+        pmcid,
+        mask,
+        counts,
+        role: role(&r.kind),
+        language: r.language.as_deref().and_then(language),
         year: r.year(),
         author: author_shown.as_ref().map(|a| a.to_lowercase()),
         author_shown,
         sorted,
-        words,
         study_names: study_names(&prepared),
         before_numbers: words_before_numbers(&prepared),
+        tokens: tokens(&prepared),
         prepared,
-        version: version(r),
+        version: version(r, &normal),
     }
 }
 
@@ -356,6 +499,7 @@ struct Patterns {
     phase: Regex,
     follow_up: [Regex; 2],
     study: Regex,
+    part: Regex,
     number: Regex,
 }
 
@@ -372,6 +516,9 @@ fn patterns() -> &'static Patterns {
                 re(&format!(r"(?i)\b(?P<unit>year|month|week|day)s?\s+(?P<a>\d+){range}\b")),
             ],
             study: re(&format!(r"(?i)\b(?:study|trial)\s*(?:no\.?|number|#)?\s*(?P<a>\d+){range}\b")),
+            // "Part I" and "Part II", "Paper 2", "Pt. 3": parts of one work, each its own
+            // publication.
+            part: re(r"(?i)\b(?:part|pt|paper)\.?\s*(?P<a>(?:iv|v|i{1,3}|\d+)[a-c]?)\b"),
             number: re(r"^(?P<base>iv|v|i{1,3}|\d+(?:\.\d+)?)(?P<suffix>[a-c]?)$"),
         }
     })
@@ -383,9 +530,21 @@ const NOT_STUDY_NAMES: &[&str] = &[
     "number",
 ];
 
+/// NFC, skipping the work for text that is already in it, as almost every title is.
+fn nfc(s: &str) -> std::borrow::Cow<'_, str> {
+    if s.is_ascii()
+        || unicode_normalization::is_nfc_quick(s.chars())
+            == unicode_normalization::IsNormalized::Yes
+    {
+        std::borrow::Cow::Borrowed(s)
+    } else {
+        std::borrow::Cow::Owned(s.nfc().collect())
+    }
+}
+
 fn prepare(title: &str) -> String {
-    let t: String = title
-        .nfc()
+    let t: String = nfc(title)
+        .chars()
         .map(|c| {
             if matches!(c, '\u{2010}'..='\u{2015}' | '\u{2212}') {
                 '-'
@@ -517,49 +676,94 @@ fn words_before_numbers(prepared: &str) -> HashSet<String> {
         .collect()
 }
 
+/// A title's distinguishing tokens. Which words count as study names depends on the pair, so
+/// every word followed by a number is kept with its number; the other kinds are fixed.
 #[derive(Default)]
 struct Tokens {
+    /// Each lower-case word a number follows, with the number.
+    numbered: Vec<(String, String)>,
+    /// Phases, follow-up times, study numbers and parts.
     kinds: [HashSet<String>; 4],
 }
 
-fn tokens(prepared: &str, names: &HashSet<String>) -> Tokens {
+fn tokens(prepared: &str) -> Tokens {
     let p = patterns();
-    let mut t = Tokens::default();
-    for (w, n) in letters_before_digits(prepared, true) {
-        let w = w.to_lowercase();
-        if names.contains(&w) {
-            t.kinds[0].insert(format!("{w} {}", number(n)));
+    let mut t = Tokens {
+        numbered: letters_before_digits(prepared, true)
+            .into_iter()
+            .map(|(w, n)| (w.to_lowercase(), number(n)))
+            .collect(),
+        kinds: Default::default(),
+    };
+    // Each pattern runs only when the title holds its word; the patterns are slow and the
+    // words rare. regex-lite folds only ASCII case, so an ASCII lower-case search is exact.
+    let lower = prepared.to_ascii_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| lower.contains(w));
+    if has(&["phase"]) {
+        for m in p.phase.captures_iter(prepared) {
+            t.kinds[0].extend(ends(&m));
         }
     }
-    for m in p.phase.captures_iter(prepared) {
-        t.kinds[1].extend(ends(&m));
-    }
-    for pat in &p.follow_up {
-        for m in pat.captures_iter(prepared) {
-            let unit = m["unit"].to_lowercase();
-            let unit = if unit == "yr" {
-                "year".to_string()
-            } else {
-                unit
-            };
-            t.kinds[2].extend(ends(&m).into_iter().map(|n| format!("{unit} {n}")));
+    if has(&["year", "yr", "month", "week", "day"]) {
+        for pat in &p.follow_up {
+            for m in pat.captures_iter(prepared) {
+                let unit = m["unit"].to_lowercase();
+                let unit = if unit == "yr" {
+                    "year".to_string()
+                } else {
+                    unit
+                };
+                t.kinds[1].extend(ends(&m).into_iter().map(|n| format!("{unit} {n}")));
+            }
         }
     }
-    for m in p.study.captures_iter(prepared) {
-        t.kinds[3].extend(ends(&m));
+    if has(&["study", "trial"]) {
+        for m in p.study.captures_iter(prepared) {
+            t.kinds[2].extend(ends(&m));
+        }
+    }
+    if has(&["part", "pt", "paper"]) {
+        for m in p.part.captures_iter(prepared) {
+            t.kinds[3].extend(ends(&m));
+        }
     }
     t
 }
 
 fn tokens_conflict(a: &Facts, b: &Facts) -> bool {
-    let mut names: HashSet<String> = a.study_names.union(&b.study_names).cloned().collect();
-    names.extend(a.before_numbers.intersection(&b.before_numbers).cloned());
-    let ta = tokens(&a.prepared, &names);
-    let tb = tokens(&b.prepared, &names);
-    (0..4).any(|k| !ta.kinds[k].is_empty() && !tb.kinds[k].is_empty() && ta.kinds[k] != tb.kinds[k])
+    // The same title has the same tokens, whatever the names.
+    if a.prepared == b.prepared {
+        return false;
+    }
+    if (0..4).any(|k| differ(&a.tokens.kinds[k], &b.tokens.kinds[k])) {
+        return true;
+    }
+    // A study name: a word with two capitals in either title, or a word a number follows in
+    // both.
+    let is_name = |w: &str| {
+        a.study_names.contains(w)
+            || b.study_names.contains(w)
+            || (a.before_numbers.contains(w) && b.before_numbers.contains(w))
+    };
+    differ(&named(&a.tokens, is_name), &named(&b.tokens, is_name))
 }
 
-/// Whether two titles name different study acronyms, phases, follow-up times or study numbers.
+/// The study names a title numbers, with their numbers.
+fn named(t: &Tokens, is_name: impl Fn(&str) -> bool) -> HashSet<(&str, &str)> {
+    t.numbered
+        .iter()
+        .filter(|(w, _)| is_name(w))
+        .map(|(w, n)| (w.as_str(), n.as_str()))
+        .collect()
+}
+
+/// Two token sets conflict when both have tokens and they are not the same.
+fn differ<T: Eq + std::hash::Hash>(x: &HashSet<T>, y: &HashSet<T>) -> bool {
+    !x.is_empty() && !y.is_empty() && x != y
+}
+
+/// Whether two titles name different study acronyms, phases, parts, follow-up times or study
+/// numbers.
 #[cfg(test)]
 fn titles_conflict(a: &str, b: &str) -> bool {
     let fa = facts(&Reference {
@@ -575,10 +779,20 @@ fn titles_conflict(a: &str, b: &str) -> bool {
 
 // ---- Comparing a pair. -----------------------------------------------------------------------
 
+/// How a candidate pair relates. Anything that tells the two records apart wins over
+/// `Duplicate`, whatever identifier they share: a chapter can carry its book's DOI, a
+/// translation its original's.
 fn relation(a: &Facts, b: &Facts) -> Relation {
     let v = [a.version, b.version];
-    if v.contains(&Version::Notice) && a.version != b.version {
+    let differ = a.version != b.version;
+    if differ && v.contains(&Version::Notice) {
         Relation::Notice
+    } else if differ && v.contains(&Version::Comment) {
+        Relation::Comment
+    } else if a.role != b.role && a.role != Role::Other && b.role != Role::Other {
+        Relation::Part
+    } else if matches!((&a.language, &b.language), (Some(x), Some(y)) if x != y) {
+        Relation::Translation
     } else if v.contains(&Version::Preprint) && v.contains(&Version::Article) {
         Relation::Version
     } else {
@@ -612,7 +826,7 @@ fn compare(i: usize, j: usize, a: &Facts, b: &Facts) -> Option<Candidate> {
         return None;
     }
     if let (Some(x), Some(y)) = (a.year, b.year) {
-        if (x - y).abs() > 1 {
+        if x.abs_diff(y) > 1 {
             return None;
         }
     }
@@ -626,11 +840,15 @@ fn compare(i: usize, j: usize, a: &Facts, b: &Facts) -> Option<Candidate> {
     if 200 * la.min(lb) < 90 * (la + lb) {
         return None;
     }
-    let score = ratio_chars(&a.sorted, &b.sorted);
+    let score = if a.sorted == b.sorted {
+        100.0
+    } else {
+        ratio_chars(&a.sorted, &b.sorted)
+    };
     if score < 90.0 {
         return None;
     }
-    let year_match = matches!((a.year, b.year), (Some(x), Some(y)) if (x - y).abs() <= 1);
+    let year_match = matches!((a.year, b.year), (Some(x), Some(y)) if x.abs_diff(y) <= 1);
     let author_match = a.author.is_some() && a.author == b.author;
     if !(year_match || author_match || score >= 98.0) {
         return None;
@@ -640,12 +858,18 @@ fn compare(i: usize, j: usize, a: &Facts, b: &Facts) -> Option<Candidate> {
     }
     let mut reasons = vec![Reason::Title { score }];
     if year_match {
+        // The earlier year and the first spelling, so the reasons do not depend on which
+        // record comes first.
         reasons.push(Reason::Year {
-            year: a.year.unwrap_or_default(),
+            year: a.year.min(b.year).unwrap_or_default(),
         });
     }
     if author_match {
-        let shown = a.author_shown.clone().unwrap_or_default();
+        let shown = a
+            .author_shown
+            .clone()
+            .min(b.author_shown.clone())
+            .unwrap_or_default();
         let mut c = shown.chars();
         let family = c
             .next()
@@ -670,29 +894,136 @@ fn compare_pair(a: &Reference, b: &Reference) -> Option<Candidate> {
 
 // ---- Candidate generation and grouping. ------------------------------------------------------
 
-fn pairs_to_compare(facts: &[Facts]) -> Vec<(usize, usize)> {
-    let n = facts.len();
-    if n <= EXHAUSTIVE_LIMIT {
-        return (0..n)
-            .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
-            .collect();
+/// What candidate generation reads of a record, packed together. Each bucket keeps its own
+/// copy, so a scan reads memory in order.
+#[derive(Clone, Copy)]
+struct Hot {
+    counts: [u8; COUNT_BUCKETS],
+    len: u32,
+    /// `NONE` when missing.
+    year: i32,
+    /// The first author, interned; `ANON` when missing.
+    author: u32,
+    /// The record.
+    index: u32,
+}
+
+const NONE: i32 = i32::MIN;
+const ANON: u32 = u32::MAX;
+
+/// Whether the fields rule 2 compares allow the pair: the same first author or one missing,
+/// years at most one apart or one missing.
+fn may_match(a: &Hot, b: &Hot) -> bool {
+    (a.author == ANON || b.author == ANON || a.author == b.author)
+        && (a.year == NONE || b.year == NONE || a.year.abs_diff(b.year) <= 1)
+}
+
+/// Whether two titles' character counts allow a score of `t`: the longest common subsequence
+/// holds no more of a character than either title does. A necessary condition of the score.
+fn may_score(a: &Hot, b: &Hot, t: u32) -> bool {
+    let mut l1 = 0u32;
+    for k in 0..COUNT_BUCKETS {
+        l1 += a.counts[k].abs_diff(b.counts[k]) as u32;
     }
-    // Every record's place in title order, so a block sorts by title cheaply.
-    let mut order: Vec<usize> = (0..n).collect();
-    order.sort_by(|&i, &j| facts[i].sorted.cmp(&facts[j].sorted));
-    let mut rank = vec![0u32; n];
-    for (r, &i) in order.iter().enumerate() {
-        rank[i] = r as u32;
+    100 * l1 <= (100 - t) * (a.len + b.len)
+}
+
+/// Titled records, split by which identifier kinds they have and in title-length order.
+#[derive(Default)]
+struct Bucket {
+    by_mask: [Vec<Hot>; 8],
+}
+
+impl Bucket {
+    fn push(&mut self, mask: u8, h: Hot) {
+        self.by_mask[mask as usize].push(h);
     }
-    let mut out: Vec<(u32, u32)> = Vec::new();
-    let mut pair = |i: usize, j: usize| {
-        out.push(if i < j {
-            (i as u32, j as u32)
-        } else {
-            (j as u32, i as u32)
-        })
+}
+
+/// Every pair `x` in `xs`, `y` in `ys` that rule 1 leaves to the titles (no identifier kind on
+/// both), that rule 2 allows, and whose titles can score `t`: the lengths must allow it
+/// (`200·min(la, lb) ≥ t·(la + lb)`) and so must the character counts. A bucket joined with
+/// itself visits each pair once.
+fn join(xs: &Bucket, ys: &Bucket, t: u32, out: &mut Vec<(u32, u32)>) {
+    let itself = std::ptr::eq(xs, ys);
+    for (mx, xs) in xs.by_mask.iter().enumerate() {
+        for (my, ys) in ys.by_mask.iter().enumerate() {
+            if mx & my != 0 || (itself && mx > my) || xs.is_empty() || ys.is_empty() {
+                continue;
+            }
+            let same_list = itself && mx == my;
+            for (p, hx) in xs.iter().enumerate() {
+                let lo = (t * hx.len).div_ceil(200 - t);
+                let hi = (200 - t) * hx.len / t;
+                let mut from = ys.partition_point(|h| h.len < lo);
+                if same_list {
+                    from = from.max(p + 1);
+                }
+                for hy in &ys[from..] {
+                    if hy.len > hi {
+                        break;
+                    }
+                    if hx.index != hy.index && may_match(hx, hy) && may_score(hx, hy, t) {
+                        let (x, y) = (hx.index, hy.index);
+                        out.push((x.min(y), x.max(y)));
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Run the joins, on every core where there are threads. The result is sorted, so it does not
+/// depend on how the work was shared.
+fn run_joins(jobs: &[(&Bucket, &Bucket, u32)]) -> Vec<(u32, u32)> {
+    let sequential = |jobs: &[(&Bucket, &Bucket, u32)]| {
+        let mut out = Vec::new();
+        for &(xs, ys, t) in jobs {
+            join(xs, ys, t, &mut out);
+        }
+        out
     };
-    // Records that share an identifier: every pair.
+    let threads = threads();
+    if threads < 2 || jobs.len() < 2 {
+        return sequential(jobs);
+    }
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = (0..threads)
+            .map(|_| {
+                scope.spawn(|| {
+                    let mut out = Vec::new();
+                    loop {
+                        let k = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                        let Some(&(xs, ys, t)) = jobs.get(k) else {
+                            break out;
+                        };
+                        join(xs, ys, t, &mut out);
+                    }
+                })
+            })
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|w| w.join().expect("a join worker panicked"))
+            .collect()
+    })
+}
+
+/// How many threads to use: one per core, or one where there are no threads (WebAssembly).
+fn threads() -> usize {
+    if cfg!(target_family = "wasm") {
+        1
+    } else {
+        std::thread::available_parallelism().map_or(1, usize::from)
+    }
+}
+
+/// The pairs to compare: a superset of every pair [`compare`] accepts. See the module
+/// documentation for why nothing is lost.
+fn pairs_to_compare(facts: &[Facts]) -> Vec<(usize, usize)> {
+    let mut out: Vec<(u32, u32)> = Vec::new();
+    // Rule 1: records that share an identifier, every pair.
     let mut by_id: HashMap<(u8, &str), Vec<usize>> = HashMap::new();
     for (i, f) in facts.iter().enumerate() {
         for (k, v) in [(0u8, &f.doi), (1, &f.pmid), (2, &f.pmcid)] {
@@ -704,49 +1035,93 @@ fn pairs_to_compare(facts: &[Facts]) -> Vec<(usize, usize)> {
     for members in by_id.values() {
         for (x, &i) in members.iter().enumerate() {
             for &j in &members[x + 1..] {
-                pair(i, j);
+                out.push((i as u32, j as u32));
             }
         }
     }
-    // Other blocks: in title order, each record and the next WINDOW.
-    let mut blocks: HashMap<Key, Vec<usize>> = HashMap::new();
-    let mut df: HashMap<&str, usize> = HashMap::new();
-    for f in facts {
-        for w in &f.words {
-            *df.entry(w.as_str()).or_default() += 1;
+    // Rules 2 and 3, on titled records in title-length order.
+    let mut authors: HashMap<&str, u32> = HashMap::new();
+    let mut titled: Vec<usize> = (0..facts.len())
+        .filter(|&i| !facts[i].sorted.is_empty())
+        .collect();
+    titled.sort_by_key(|&i| (facts[i].sorted.len(), i));
+    let mut all = Bucket::default();
+    let mut by_author: HashMap<u32, HashMap<i32, Bucket>> = HashMap::new();
+    let mut by_author_all: HashMap<u32, Bucket> = HashMap::new();
+    let mut by_year: HashMap<i32, Bucket> = HashMap::new();
+    let mut anonymous: HashMap<i32, Bucket> = HashMap::new();
+    for &i in &titled {
+        let f = &facts[i];
+        let h = Hot {
+            counts: f.counts,
+            len: f.sorted.len() as u32,
+            year: f.year.unwrap_or(NONE),
+            author: f.author.as_deref().map_or(ANON, |a| {
+                let next = authors.len() as u32;
+                *authors.entry(a).or_insert(next)
+            }),
+            index: i as u32,
+        };
+        let m = f.mask;
+        if h.author == ANON {
+            anonymous.entry(h.year).or_default().push(m, h);
+            // Only anonymous records are joined with `all` and `by_year`, and each of those
+            // joins covers every pair of two anonymous records too.
+        } else {
+            by_author
+                .entry(h.author)
+                .or_default()
+                .entry(h.year)
+                .or_default()
+                .push(m, h);
+            by_author_all.entry(h.author).or_default().push(m, h);
+        }
+        all.push(m, h);
+        by_year.entry(h.year).or_default().push(m, h);
+    }
+    let near = |y: i32, d: i32| {
+        if y == NONE {
+            None
+        } else {
+            y.checked_add(d).filter(|z| *z != NONE)
+        }
+    };
+    let mut jobs: Vec<(&Bucket, &Bucket, u32)> = Vec::new();
+    // The same first author: the author agrees, so a score of 90 is enough. Years at most one
+    // apart, or one missing.
+    for (a, years) in &by_author {
+        for (&y, xs) in years {
+            if y == NONE {
+                jobs.push((xs, &by_author_all[a], 90));
+                continue;
+            }
+            for d in [0, 1] {
+                if let Some(ys) = near(y, d).and_then(|z| years.get(&z)) {
+                    jobs.push((xs, ys, 90));
+                }
+            }
         }
     }
-    for (i, f) in facts.iter().enumerate() {
-        if f.sorted.is_empty() {
+    // A record without a first author, and any other record: 90 when both years are there and
+    // agree, 98 when one is missing.
+    for (&y, xs) in &anonymous {
+        if y == NONE {
+            jobs.push((xs, &all, 98));
             continue;
         }
-        // The whole title.
-        blocks.entry(Key::Title(&f.sorted)).or_default().push(i);
-        // The three rarest title words, and the two rarest together.
-        let mut ws: Vec<&str> = f.words.iter().map(String::as_str).collect();
-        ws.sort_by_key(|w| (df[w], std::cmp::Reverse(w.len()), *w));
-        if let [a, b, ..] = ws[..] {
-            blocks
-                .entry(Key::Two(a.min(b), a.max(b)))
-                .or_default()
-                .push(i);
-        }
-        for w in ws.into_iter().take(3) {
-            blocks.entry(Key::Word(w)).or_default().push(i);
-        }
-        // First author and year.
-        if let (Some(a), Some(y)) = (&f.author, f.year) {
-            blocks.entry(Key::Author(a, y)).or_default().push(i);
-        }
-    }
-    for members in blocks.values_mut() {
-        members.sort_unstable_by_key(|&i| rank[i]);
-        for (x, &i) in members.iter().enumerate() {
-            for &j in members.iter().skip(x + 1).take(WINDOW) {
-                pair(i, j);
+        for d in [-1, 0, 1] {
+            if let Some(ys) = near(y, d).and_then(|z| by_year.get(&z)) {
+                jobs.push((xs, ys, 90));
             }
         }
+        if let Some(ys) = by_year.get(&NONE) {
+            jobs.push((xs, ys, 98));
+        }
     }
+    // The largest joins first, so no thread is left with one long job at the end.
+    let size = |b: &Bucket| b.by_mask.iter().map(Vec::len).sum::<usize>();
+    jobs.sort_by_key(|&(xs, ys, _)| std::cmp::Reverse(size(xs) * size(ys)));
+    out.extend(run_joins(&jobs));
     out.sort_unstable();
     out.dedup();
     out.into_iter()
@@ -754,20 +1129,16 @@ fn pairs_to_compare(facts: &[Facts]) -> Vec<(usize, usize)> {
         .collect()
 }
 
-#[derive(PartialEq, Eq, Hash)]
-enum Key<'a> {
-    Title(&'a [char]),
-    Word(&'a str),
-    Two(&'a str, &'a str),
-    Author(&'a str, i32),
-}
-
-struct Groups {
+/// Union-find over the records, keeping each group's identifiers so no group gathers two
+/// different values of one kind.
+struct Groups<'a> {
+    facts: &'a [Facts],
     parent: Vec<usize>,
-    ids: Vec<[HashSet<String>; 3]>,
+    /// A root's identifiers, once a union has touched it.
+    ids: HashMap<usize, [HashSet<&'a str>; 3]>,
 }
 
-impl Groups {
+impl<'a> Groups<'a> {
     fn find(&mut self, mut x: usize) -> usize {
         while self.parent[x] != x {
             self.parent[x] = self.parent[self.parent[x]];
@@ -781,57 +1152,208 @@ impl Groups {
         if ra == rb {
             return true;
         }
-        let conflict = (0..3).any(|k| self.ids[ra][k].union(&self.ids[rb][k]).count() > 1);
-        if conflict {
+        let mut x = self.ids_of(ra);
+        let y = self.ids_of(rb);
+        if (0..3).any(|k| x[k].union(&y[k]).count() > 1) {
+            self.ids.insert(ra, x);
+            self.ids.insert(rb, y);
             return false;
         }
-        let moved = std::mem::take(&mut self.ids[rb]);
-        for (k, set) in moved.into_iter().enumerate() {
-            self.ids[ra][k].extend(set);
+        for (k, set) in y.into_iter().enumerate() {
+            x[k].extend(set);
         }
+        self.ids.insert(ra, x);
         self.parent[rb] = ra;
         true
     }
+
+    /// Take a root's identifiers out of the map, or read them from its record.
+    fn ids_of(&mut self, root: usize) -> [HashSet<&'a str>; 3] {
+        self.ids.remove(&root).unwrap_or_else(|| {
+            let f = &self.facts[root];
+            [&f.doi, &f.pmid, &f.pmcid].map(|v| v.iter().map(String::as_str).collect())
+        })
+    }
 }
 
-/// Find candidate duplicates among references.
-pub fn find_duplicates(refs: &[Reference]) -> Duplicates {
-    let facts: Vec<Facts> = refs.iter().map(facts).collect();
-    let mut groups = Groups {
-        parent: (0..refs.len()).collect(),
-        ids: facts
+/// Each record's place in an order of the records' content, equal for records the rules cannot
+/// tell apart. Ties between candidates are broken by it, so the input order does not matter.
+fn content_ranks(facts: &[Facts], records: &[usize]) -> HashMap<usize, usize> {
+    #[allow(clippy::type_complexity)]
+    fn key(
+        f: &Facts,
+    ) -> (
+        &[char],
+        &str,
+        &Option<String>,
+        &Option<String>,
+        &Option<String>,
+        Option<i32>,
+        &Option<String>,
+        (Version, Role),
+        &Option<String>,
+    ) {
+        (
+            &f.sorted,
+            &f.prepared,
+            &f.doi,
+            &f.pmid,
+            &f.pmcid,
+            f.year,
+            &f.author_shown,
+            (f.version, f.role),
+            &f.language,
+        )
+    }
+    let mut order = records.to_vec();
+    order.sort_by(|&i, &j| key(&facts[i]).cmp(&key(&facts[j])));
+    let mut rank = HashMap::with_capacity(order.len());
+    for w in 0..order.len() {
+        let same = w > 0 && key(&facts[order[w]]) == key(&facts[order[w - 1]]);
+        let r = if same { rank[&order[w - 1]] } else { w };
+        rank.insert(order[w], r);
+    }
+    rank
+}
+
+/// A score that sorts by `total_cmp`.
+#[derive(PartialEq)]
+struct OrdScore(f64);
+
+impl Eq for OrdScore {}
+
+impl PartialOrd for OrdScore {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OrdScore {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.0.total_cmp(&other.0)
+    }
+}
+
+/// Compare every pair, keeping the candidates in the pairs' order, on every core where there
+/// are threads.
+fn compare_all(facts: &[Facts], todo: &[(usize, usize)]) -> Vec<Candidate> {
+    let run = |pairs: &[(usize, usize)]| -> Vec<Candidate> {
+        pairs
             .iter()
-            .map(|f| [&f.doi, &f.pmid, &f.pmcid].map(|v| v.iter().cloned().collect()))
-            .collect(),
+            .filter_map(|&(i, j)| compare(i, j, &facts[i], &facts[j]))
+            .collect()
     };
-    let mut pairs = Vec::new();
-    let todo = pairs_to_compare(&facts);
-    for (i, j) in todo {
-        if let Some(c) = compare(i, j, &facts[i], &facts[j]) {
-            if groups.union(i, j) {
-                pairs.push(c);
-            }
+    let threads = threads();
+    if threads < 2 || todo.len() < 4096 {
+        return run(todo);
+    }
+    let chunk = todo.len().div_ceil(threads);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = todo
+            .chunks(chunk)
+            .map(|c| scope.spawn(move || run(c)))
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|w| w.join().expect("a compare worker panicked"))
+            .collect()
+    })
+}
+
+/// Compare the pairs and join the duplicates into groups.
+fn decide(facts: &[Facts], todo: &[(usize, usize)]) -> Duplicates {
+    let candidates = compare_all(facts, todo);
+    let mut groups = Groups {
+        facts,
+        parent: (0..facts.len()).collect(),
+        ids: HashMap::new(),
+    };
+    // Only records in a duplicate pair can join a group; the rest stay alone.
+    let order: Vec<usize> = (0..candidates.len())
+        .filter(|&k| candidates[k].relation == Relation::Duplicate)
+        .collect();
+    let mut involved: Vec<usize> = order
+        .iter()
+        .flat_map(|&k| [candidates[k].a, candidates[k].b])
+        .collect();
+    involved.sort_unstable();
+    involved.dedup();
+    // Join in an order of content: identifier matches, then the best titles, then by the
+    // records' content. Which duplicate a conflict turns away does not depend on input order.
+    let rank = content_ranks(facts, &involved);
+    let mut keyed: Vec<_> = order
+        .into_iter()
+        .map(|k| {
+            let c = &candidates[k];
+            let (x, y) = (rank[&c.a], rank[&c.b]);
+            (
+                !c.exact(),
+                std::cmp::Reverse(OrdScore(c.score)),
+                (x.min(y), x.max(y)),
+                (c.a, c.b),
+                k,
+            )
+        })
+        .collect();
+    keyed.sort_unstable();
+    let order = keyed.into_iter().map(|key| key.4);
+    let mut keep = vec![true; candidates.len()];
+    for k in order {
+        keep[k] = groups.union(candidates[k].a, candidates[k].b);
+    }
+    let pairs: Vec<Candidate> = candidates
+        .into_iter()
+        .zip(keep)
+        .filter_map(|(c, k)| k.then_some(c))
+        .collect();
+    // A group is exact when every duplicate pair kept inside it is.
+    let mut inexact: HashSet<usize> = HashSet::new();
+    for p in pairs.iter().filter(|p| p.relation == Relation::Duplicate) {
+        if !p.exact() {
+            inexact.insert(groups.find(p.a));
         }
     }
     let mut members: HashMap<usize, Vec<usize>> = HashMap::new();
-    for i in 0..refs.len() {
+    for &i in &involved {
         let root = groups.find(i);
         members.entry(root).or_default().push(i);
     }
     let mut out: Vec<Group> = members
-        .into_values()
-        .filter(|m| m.len() > 1)
-        .map(|members| {
-            let set: HashSet<usize> = members.iter().copied().collect();
-            let exact = pairs
-                .iter()
-                .filter(|p| set.contains(&p.a))
-                .all(Candidate::exact);
-            Group { members, exact }
+        .into_iter()
+        .filter(|(_, m)| m.len() > 1)
+        .map(|(root, members)| Group {
+            members,
+            exact: !inexact.contains(&root),
         })
         .collect();
     out.sort_by_key(|g| g.members[0]);
     Duplicates { pairs, groups: out }
+}
+
+/// Every record's facts, in record order, on every core where there are threads.
+fn all_facts(refs: &[Reference]) -> Vec<Facts> {
+    let threads = threads();
+    if threads < 2 || refs.len() < 2048 {
+        return refs.iter().map(facts).collect();
+    }
+    let chunk = refs.len().div_ceil(threads);
+    std::thread::scope(|scope| {
+        let workers: Vec<_> = refs
+            .chunks(chunk)
+            .map(|c| scope.spawn(|| c.iter().map(facts).collect::<Vec<_>>()))
+            .collect();
+        workers
+            .into_iter()
+            .flat_map(|w| w.join().expect("a facts worker panicked"))
+            .collect()
+    })
+}
+
+/// Find candidate duplicates among references.
+pub fn find_duplicates(refs: &[Reference]) -> Duplicates {
+    let facts = all_facts(refs);
+    let todo = pairs_to_compare(&facts);
+    decide(&facts, &todo)
 }
 
 #[cfg(test)]
@@ -971,7 +1493,7 @@ mod tests {
     }
 
     #[test]
-    fn blocking_finds_what_exhaustive_finds() {
+    fn candidates_are_what_exhaustive_finds() {
         // Records from a small vocabulary, so titles share many words, and copies changed the
         // ways exports change them: a typo, a word dropped or moved, case and punctuation, the
         // year one off, the author missing.
@@ -985,7 +1507,7 @@ mod tests {
         let vocab: Vec<String> = (0..300)
             .map(|i| format!("w{}x{}", i * 37 % 300, i % 7))
             .collect();
-        let mut refs: Vec<Reference> = (0..EXHAUSTIVE_LIMIT + 100)
+        let mut refs: Vec<Reference> = (0..2100)
             .map(|_| {
                 let words: Vec<&str> = (0..8 + next(5))
                     .map(|_| vocab[next(300)].as_str())
@@ -998,7 +1520,7 @@ mod tests {
             })
             .collect();
         for k in 0..200 {
-            let src = refs[next(EXHAUSTIVE_LIMIT)].clone();
+            let src = refs[next(2100)].clone();
             let mut words: Vec<String> = src
                 .title
                 .as_deref()
@@ -1047,5 +1569,241 @@ mod tests {
             }
         }
         assert!(found > 150, "only {found} candidates");
+    }
+
+    /// Every pair, compared: what the generated pairs must reproduce.
+    fn exhaustive(refs: &[Reference]) -> Duplicates {
+        let facts: Vec<Facts> = refs.iter().map(facts).collect();
+        let n = refs.len();
+        decide(
+            &facts,
+            &(0..n)
+                .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
+                .collect::<Vec<_>>(),
+        )
+    }
+
+    /// A result in terms of the records' content, so two results compare equal when they say
+    /// the same about the same records, whatever their order.
+    fn by_content(refs: &[Reference], d: &Duplicates) -> (Vec<String>, Vec<Vec<String>>) {
+        let name = |i: usize| format!("{:?}", refs[i]);
+        let mut pairs: Vec<String> = d
+            .pairs
+            .iter()
+            .map(|c| {
+                let (x, y) = (name(c.a), name(c.b));
+                let (x, y) = if x <= y { (x, y) } else { (y, x) };
+                format!("{x} {y} {:?} {} {:?}", c.relation, c.score, c.reasons)
+            })
+            .collect();
+        pairs.sort();
+        let mut groups: Vec<Vec<String>> = d
+            .groups
+            .iter()
+            .map(|g| {
+                let mut m: Vec<String> = g.members.iter().map(|&i| name(i)).collect();
+                m.sort();
+                m.push(g.exact.to_string());
+                m
+            })
+            .collect();
+        groups.sort();
+        (pairs, groups)
+    }
+
+    fn arbitrary_reference() -> impl proptest::strategy::Strategy<Value = Reference> {
+        use proptest::prelude::*;
+        let words = prop::sample::select(vec![
+            "moth", "moths", "dusk", "forest", "edge", "phase", "ii", "iii", "part", "i",
+            "erratum", "reply", "abc", "abc-1", "abc-2", "tide", "Pool", "pool", "12-month",
+        ]);
+        (
+            prop::collection::vec(words, 0..9),
+            prop::option::of(1998i32..2002),
+            prop::option::of(prop::sample::select(vec!["Adeyemi", "Lind", "Chen"])),
+            prop::option::of(prop::sample::select(vec![
+                "10.5555/a",
+                "10.5555/A",
+                "10.5555/b",
+                "doi:10.5555/b",
+                "10.12/x",
+            ])),
+            prop::option::of(prop::sample::select(vec!["123", "0123", "bad123", "456"])),
+            prop::option::of(prop::sample::select(vec!["PMC1", "PMC2", "PMCx"])),
+            prop::sample::select(vec!["article-journal", "chapter", "book"]),
+            prop::option::of(prop::sample::select(vec!["eng", "en", "fre"])),
+            prop::option::of(prop::sample::select(vec!["Preprint", "Comment", "Erratum"])),
+        )
+            .prop_map(
+                |(words, year, author, doi, pmid, pmcid, kind, lang, ptype)| {
+                    let mut r = rec(&words.join(" "), year, author.unwrap_or(""));
+                    r.doi = doi.map(str::to_string);
+                    r.pmid = pmid.map(str::to_string);
+                    r.pmcid = pmcid.map(str::to_string);
+                    r.kind = kind.to_string();
+                    r.language = lang.map(str::to_string);
+                    r.publication_types = ptype.into_iter().map(str::to_string).collect();
+                    r
+                },
+            )
+    }
+
+    #[test]
+    fn generated_pairs_lose_nothing_and_order_does_not_matter() {
+        use proptest::prelude::*;
+        let strategy = prop::collection::vec(arbitrary_reference(), 0..40).prop_flat_map(|refs| {
+            let n = refs.len();
+            (
+                Just(refs),
+                Just((0..n).collect::<Vec<usize>>()).prop_shuffle(),
+            )
+        });
+        proptest!(|((refs, perm) in strategy)| {
+            let fast = find_duplicates(&refs);
+            prop_assert_eq!(&fast, &exhaustive(&refs));
+            let shuffled: Vec<Reference> = perm.iter().map(|&i| refs[i].clone()).collect();
+            prop_assert_eq!(
+                by_content(&refs, &fast),
+                by_content(&shuffled, &find_duplicates(&shuffled))
+            );
+        });
+    }
+
+    #[test]
+    fn identifiers_must_validate() {
+        let mut a = rec("Moths at the forest edge", Some(2019), "Adeyemi");
+        let mut b = rec("Tides in the estuary", Some(2005), "Lind");
+        a.pmid = Some("bad123".into());
+        b.pmid = Some("123".into());
+        assert!(compare_pair(&a, &b).is_none());
+        a.pmid = Some("PMID: 0123".into());
+        assert!(compare_pair(&a, &b).unwrap().exact());
+        a.pmcid = Some("PMCx".into());
+        b.pmcid = Some("PMC9".into());
+        assert!(compare_pair(&a, &b).unwrap().exact());
+    }
+
+    #[test]
+    fn relations_other_than_duplicate() {
+        let same_doi = |mut a: Reference, mut b: Reference| {
+            a.doi = Some("10.5555/x".into());
+            b.doi = Some("10.5555/x".into());
+            compare_pair(&a, &b).unwrap().relation
+        };
+        let moths = || rec("Moths at the forest edge", Some(2019), "Adeyemi");
+        // A chapter and its book.
+        let mut chapter = moths();
+        chapter.kind = "chapter".into();
+        let mut book = rec("Night life", Some(2019), "Lind");
+        book.kind = "book".into();
+        assert_eq!(same_doi(chapter, book), Relation::Part);
+        // A correction and its article, by type and by title.
+        let mut erratum = moths();
+        erratum.publication_types = vec!["Published Erratum".into()];
+        assert_eq!(
+            compare_pair(&erratum, &moths()).unwrap().relation,
+            Relation::Notice
+        );
+        let erratum = rec("Erratum: Moths at the forest edge", Some(2019), "Adeyemi");
+        let original = rec("Moths at the forest edge", Some(2019), "Adeyemi");
+        let c = compare_pair(&erratum, &original);
+        assert!(c.is_none_or(|c| c.relation == Relation::Notice));
+        // A comment and its article.
+        let mut comment = moths();
+        comment.publication_types = vec!["Comment".into()];
+        assert_eq!(
+            compare_pair(&comment, &moths()).unwrap().relation,
+            Relation::Comment
+        );
+        let reply = rec(
+            "Reply to: The moths at the forest edge at dusk and dawn",
+            Some(2019),
+            "Adeyemi",
+        );
+        let article = rec(
+            "The moths at the forest edge at dusk and dawn",
+            Some(2019),
+            "Adeyemi",
+        );
+        assert_eq!(
+            compare_pair(&reply, &article).unwrap().relation,
+            Relation::Comment
+        );
+        // A preprint and the published paper, sharing a PMID.
+        let mut pre = moths();
+        pre.publication_types = vec!["Preprint".into()];
+        pre.pmid = Some("31000001".into());
+        let mut published = moths();
+        published.pmid = Some("31000001".into());
+        let c = compare_pair(&pre, &published).unwrap();
+        assert_eq!(c.relation, Relation::Version);
+        assert!(!c.exact());
+        // Parts I and II.
+        assert!(compare_pair(
+            &rec(
+                "Moths at the forest edge, part I: dusk",
+                Some(2019),
+                "Adeyemi"
+            ),
+            &rec(
+                "Moths at the forest edge, part II: dusk",
+                Some(2019),
+                "Adeyemi"
+            ),
+        )
+        .is_none());
+        assert!(compare_pair(
+            &rec("Moths at the forest edge. Part 1", Some(2019), "Adeyemi"),
+            &rec("Moths at the forest edge. Part I", Some(2019), "Adeyemi"),
+        )
+        .is_some());
+        // A translated edition, even with the original's DOI.
+        let mut english = moths();
+        english.language = Some("eng".into());
+        let mut french = moths();
+        french.language = Some("fre".into());
+        assert_eq!(same_doi(english.clone(), french), Relation::Translation);
+        let mut also_english = moths();
+        also_english.language = Some("en-GB".into());
+        assert_eq!(same_doi(english, also_english), Relation::Duplicate);
+    }
+
+    #[test]
+    fn only_duplicates_join_groups() {
+        let mut a = rec("Moths at the forest edge", Some(2019), "Adeyemi");
+        let mut b = a.clone();
+        a.kind = "chapter".into();
+        b.kind = "book".into();
+        a.doi = Some("10.5555/x".into());
+        b.doi = Some("10.5555/x".into());
+        let d = find_duplicates(&[a, b]);
+        assert_eq!(d.pairs.len(), 1);
+        assert_eq!(d.pairs[0].relation, Relation::Part);
+        assert!(!d.pairs[0].exact());
+        assert!(d.groups.is_empty());
+    }
+
+    #[test]
+    fn many_identical_titles() {
+        // 3000 editorials: one title, three authors, 30 years. Only the genuine candidates are
+        // compared: the same author and years at most one apart.
+        let refs: Vec<Reference> = (0..3000)
+            .map(|i| {
+                rec(
+                    "Editorial",
+                    Some(1990 + (i % 30) as i32),
+                    ["Adeyemi", "Lind", "Chen"][i / 1000],
+                )
+            })
+            .collect();
+        let facts: Vec<Facts> = refs.iter().map(facts).collect();
+        let todo = pairs_to_compare(&facts);
+        // Per author 1000 records over 30 years: about 33 a year, pairs within and with the
+        // next year.
+        assert!(
+            todo.len() < 3 * 30 * (33 * 33 / 2 + 34 * 34 + 40),
+            "{}",
+            todo.len()
+        );
     }
 }

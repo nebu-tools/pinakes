@@ -67,7 +67,7 @@ pub struct SourceField {
 }
 
 /// A person or organisation, in CSL's parts.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Name {
     pub family: Option<String>,
     pub given: Option<String>,
@@ -78,10 +78,13 @@ pub struct Name {
     pub suffix: Option<String>,
     /// An organisation, or a name that should not be split.
     pub literal: Option<String>,
+    /// CSL-JSON name members Pinakes does not model (`static-ordering`, `comma-suffix`, ...),
+    /// kept as they were read.
+    pub extra: Map<String, Value>,
 }
 
 /// A date or date range. `raw` keeps the source text when parsing it lost something.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct Date {
     pub start: Option<Ymd>,
     pub end: Option<Ymd>,
@@ -90,6 +93,8 @@ pub struct Date {
     pub literal: Option<String>,
     /// The source text, when `start` and `end` do not say all of it ("Summer 2020").
     pub raw: Option<String>,
+    /// CSL-JSON date members Pinakes does not model (`season`, ...), kept as they were read.
+    pub extra: Map<String, Value>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -126,6 +131,22 @@ impl Reference {
 }
 
 impl Name {
+    /// The literal that stands for names left out ("and others", "et al."). BibTeX writes it
+    /// back as `and others`, RIS as `et al.`; CSL-JSON holds it as `{"literal": "others"}`.
+    pub const OTHERS: &'static str = "others";
+
+    /// The marker for names left out.
+    pub fn others() -> Name {
+        Name::literal(Name::OTHERS)
+    }
+
+    /// Whether this is the marker for names left out.
+    pub fn is_others(&self) -> bool {
+        self.literal.as_deref() == Some(Name::OTHERS)
+            && self.family.is_none()
+            && self.given.is_none()
+    }
+
     pub fn literal(text: &str) -> Name {
         Name {
             literal: Some(text.trim().to_string()),
@@ -161,17 +182,19 @@ impl Name {
         if let Some(lit) = &self.literal {
             return lit.clone();
         }
-        let mut family = self.display_family();
-        if let Some(d) = &self.dropping_particle {
-            family = format!("{d} {family}");
-        }
-        let mut out = family;
+        let family = self.display_family();
+        let mut out = match &self.dropping_particle {
+            Some(d) if !family.is_empty() => format!("{d} {family}"),
+            Some(d) => d.clone(),
+            None => family,
+        };
         if let Some(g) = &self.given {
             out.push_str(", ");
             out.push_str(g);
         }
         if let Some(s) = &self.suffix {
-            out.push_str(", ");
+            // With no given name the suffix keeps its place: "Family, , Suffix".
+            out.push_str(if self.given.is_some() { ", " } else { ", , " });
             out.push_str(s);
         }
         out

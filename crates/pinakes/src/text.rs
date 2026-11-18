@@ -320,6 +320,50 @@ pub fn squash(s: &str) -> String {
     out
 }
 
+/// One line of text in the model's normal form: control characters removed, white space
+/// (line breaks included) squashed to single spaces, trimmed, NFC.
+pub fn clean_line(s: &str) -> String {
+    let squashed = squash(&strip_controls(s));
+    if squashed.is_ascii() {
+        squashed
+    } else {
+        squashed.nfc().collect()
+    }
+}
+
+/// Text that may run over several lines (an abstract, a note) in normal form: each line as
+/// [`clean_line`] makes it, paragraphs separated by one empty line, no empty lines at either
+/// end.
+pub fn clean_lines(s: &str) -> String {
+    let s = strip_controls(&s.replace("\r\n", "\n").replace('\r', "\n"));
+    let mut out = String::with_capacity(s.len());
+    let mut blank = false;
+    for line in s.split(['\n', '\u{2028}', '\u{2029}']) {
+        let line = clean_line(line);
+        if line.is_empty() {
+            blank = !out.is_empty();
+            continue;
+        }
+        if !out.is_empty() {
+            out.push_str(if blank { "\n\n" } else { "\n" });
+        }
+        blank = false;
+        out.push_str(&line);
+    }
+    out
+}
+
+/// Control characters other than white space removed.
+/// Control characters other than whitespace, and byte-order marks, which reading removes from
+/// the text anyway.
+fn strip_controls(s: &str) -> String {
+    let stray = |c: char| c == '\u{FEFF}' || (c.is_control() && !c.is_whitespace());
+    if !s.chars().any(stray) {
+        return s.to_string();
+    }
+    s.chars().filter(|&c| !stray(c)).collect()
+}
+
 /// Remove the inline HTML that CSL allows in titles (`<i>`, `<b>`, `<sup>`, `<sub>`,
 /// `<span style="font-variant:small-caps;">`, `<span class="nocase">`). Other `<` stays.
 pub fn strip_markup(s: &str) -> String {

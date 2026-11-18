@@ -11,6 +11,7 @@
       "volume": "373",
       "issue": "3",
       "number": "e1023",
+      "genre": "Article",
       "abstract": "Moths are among the most important pollinators of meadow plants at night.",
       "language": "English",
       "note": "Cited By :1250; Export Date: 10 May 2024",
@@ -36,14 +37,7 @@
         ]
       },
       "custom": {
-        "database": "Scopus",
-        "source-fields": [
-          {
-            "format": "ris",
-            "name": "M3",
-            "value": "Article"
-          }
-        ]
+        "database": "Scopus"
       }
     }
   ]

@@ -1,0 +1,82 @@
+[package]
+name = "pinakes-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+pinakes = { path = "../crates/pinakes" }
+
+# Kept out of the main workspace: it needs nightly and cargo-fuzz.
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "read_ris"
+path = "fuzz_targets/read_ris.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_bibtex"
+path = "fuzz_targets/read_bibtex.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_medline"
+path = "fuzz_targets/read_medline.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_pubmed_xml"
+path = "fuzz_targets/read_pubmed_xml.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_csl_json"
+path = "fuzz_targets/read_csl_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_wos"
+path = "fuzz_targets/read_wos.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_wos_tab"
+path = "fuzz_targets/read_wos_tab.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "read_csv"
+path = "fuzz_targets/read_csv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "round_trip"
+path = "fuzz_targets/round_trip.rs"
+test = false
+doc = false
+bench = false

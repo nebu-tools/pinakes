@@ -32,7 +32,7 @@
   ],
   "references": [
     {
-      "id": "17",
+      "id": 17,
       "type": "article-journal",
       "title": "The moths of the forest edge",
       "container-title": "Journal of Nocturnal Ecology",
@@ -62,8 +62,8 @@
       "issued": {
         "date-parts": [
           [
-            2020,
-            5
+            "2020",
+            "5"
           ]
         ]
       },
@@ -121,19 +121,13 @@
           ]
         ],
         "circa": true,
-        "raw": "about 1890"
+        "literal": "about 1890"
       }
     },
     {
       "id": "weird",
       "type": "a-type-nobody-defines",
-      "author": [
-        {
-          "family": "list",
-          "given": "not",
-          "non-dropping-particle": "a"
-        }
-      ],
+      "author": "not a list",
       "title": [
         "not",
         "a",
