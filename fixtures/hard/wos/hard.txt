@@ -1,0 +1,39 @@
+FN Clarivate Analytics Web of Science
+VR 1.0
+PT B
+AU Odegard, A
+AF Ødegård, Åsa
+BA Okonkwo, A
+BF Okonkwo, Ada
+BE Ferrand, P
+CA Night Ecology Consortium
+TI Glow-worms
+SO FIELD GUIDE TO NIGHT LIFE
+SE Night Life Series
+BN 978-0-306-40615-7
+PU NORTHWIND PRESS
+PI OXFORD
+DT Book Chapter
+PD MAR-APR
+PY 2021
+AR e1023
+UT WOS:000500000900001
+ER
+
+PT J
+AU Ngata, A
+TI Glow-worm displays fade near lit paths
+SO ECOLOGY LETTERS
+DT Article; Early Access
+EA JAN 2024
+DI 10.5555/ECOLETT.88001
+ER
+
+PT J
+AU Lind, K
+TI A record with no UT
+PD SPR
+PY 2019
+ER
+
+EF

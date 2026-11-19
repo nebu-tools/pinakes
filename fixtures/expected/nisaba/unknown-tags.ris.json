@@ -1,0 +1,36 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "A document",
+      "container-title": "Journal of Testing",
+      "note": "database search: MEDLINE",
+      "DOI": "10.1000/abc",
+      "author": [
+        {
+          "family": "Virtanen",
+          "given": "Erika"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2024
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "QZ",
+            "value": "vendor-required"
+          }
+        ]
+      }
+    }
+  ]
+}

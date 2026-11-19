@@ -1,0 +1,260 @@
+{
+  "format": "bibtex",
+  "diagnostics": [
+    {
+      "severity": "info",
+      "code": "bibtex.preamble",
+      "line": 1,
+      "record": null,
+      "field": null,
+      "message": "Skipped an @preamble"
+    },
+    {
+      "severity": "error",
+      "code": "bibtex.unclosed",
+      "line": 76,
+      "record": null,
+      "field": null,
+      "message": "In field title of entry \"broken\", a brace is not closed; kept the fields before it"
+    },
+    {
+      "severity": "warning",
+      "code": "record.no-title",
+      "line": 74,
+      "record": 7,
+      "field": null,
+      "message": "Record broken has no title"
+    }
+  ],
+  "references": [
+    {
+      "id": "vonneumann1951",
+      "type": "article-journal",
+      "citation-key": "vonneumann1951",
+      "title": "The Moths of the Forest Edge, with a <i>v</i>ery long title over two lines",
+      "container-title": "Journal of Nocturnal Ecology",
+      "page": "12-19",
+      "abstract": "A ökologische study of 100% of the moths.",
+      "URL": "https://example.org/moths?a=1&b=50%25",
+      "DOI": "10.5555/jne.1951.12",
+      "keyword": "moths, light, edge",
+      "author": [
+        {
+          "family": "Neumann",
+          "given": "John",
+          "non-dropping-particle": "von"
+        },
+        {
+          "family": "Fontaine",
+          "given": "Jean",
+          "non-dropping-particle": "de la"
+        },
+        {
+          "family": "Smith",
+          "given": "John",
+          "suffix": "Jr."
+        },
+        {
+          "literal": "Royal Astronomical Society"
+        },
+        {
+          "family": "Christensen",
+          "given": "Lars"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            1951
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "bibtex",
+            "name": "month",
+            "value": "Spring"
+          },
+          {
+            "format": "bibtex",
+            "name": "owner",
+            "value": "lab"
+          }
+        ]
+      }
+    },
+    {
+      "id": "wang2020",
+      "type": "article-journal",
+      "citation-key": "wang2020",
+      "title": "Night \"quoted\" skies",
+      "container-title": "Sky Notes",
+      "note": "PMID: 30000808",
+      "PMID": "30000808",
+      "author": [
+        {
+          "family": "王",
+          "given": "小明"
+        },
+        {
+          "family": "Иванов",
+          "given": "Иван"
+        },
+        {
+          "family": "Ngata",
+          "given": "Aroha"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      },
+      "custom": {
+        "arxiv": "2101.00001"
+      }
+    },
+    {
+      "id": "ngata2021",
+      "type": "paper-conference",
+      "citation-key": "ngata2021",
+      "title": "Glow-worm displays",
+      "container-title": "Proceedings of the Night Ecology Meeting",
+      "publisher-place": "Wellington",
+      "page": "e1023",
+      "author": [
+        {
+          "family": "Ngata",
+          "given": "Aroha"
+        }
+      ],
+      "editor": [
+        {
+          "family": "Okonkwo",
+          "given": "Ada"
+        },
+        {
+          "family": "Ferrand",
+          "given": "Paul"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021,
+            3,
+            5
+          ],
+          [
+            2021,
+            3,
+            7
+          ]
+        ]
+      }
+    },
+    {
+      "id": "hale1890",
+      "type": "book",
+      "citation-key": "hale1890",
+      "title": "Field Notes from the Observatory",
+      "publisher": "Example Press",
+      "publisher-place": "Boston",
+      "edition": "2",
+      "ISBN": "9780306406157",
+      "author": [
+        {
+          "family": "Hale",
+          "given": "Sarah"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            1890
+          ]
+        ]
+      }
+    },
+    {
+      "id": "map",
+      "type": "webpage",
+      "citation-key": "map",
+      "title": "Night sky brightness map",
+      "URL": "https://example.org/map",
+      "author": [
+        {
+          "literal": "Dark Sky Mapping Project"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020,
+            5
+          ]
+        ],
+        "circa": true
+      },
+      "accessed": {
+        "date-parts": [
+          [
+            2026,
+            11,
+            2
+          ]
+        ]
+      }
+    },
+    {
+      "id": "circa",
+      "type": "document",
+      "citation-key": "circa",
+      "title": "An undated broadside",
+      "container-title": "Printed sheet",
+      "issued": {
+        "date-parts": [
+          [
+            1999
+          ]
+        ],
+        "raw": "1999?"
+      }
+    },
+    {
+      "id": "lind2018",
+      "type": "thesis",
+      "citation-key": "lind2018",
+      "title": "Moths in the City",
+      "publisher": "Example University",
+      "genre": "phdthesis",
+      "author": [
+        {
+          "family": "Lind",
+          "given": "Karin"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2018
+          ]
+        ]
+      }
+    },
+    {
+      "id": "broken",
+      "type": "article-journal",
+      "citation-key": "broken",
+      "author": [
+        {
+          "family": "Lind",
+          "given": "Karin"
+        }
+      ]
+    }
+  ]
+}

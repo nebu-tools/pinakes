@@ -1,0 +1,19 @@
+[package]
+name = "pinakes-python"
+description = "Python binding for Pinakes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+publish = false
+
+[lib]
+name = "_pinakes"
+crate-type = ["cdylib"]
+
+[dependencies]
+pinakes.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+pyo3 = { version = "0.30", features = ["extension-module", "abi3-py39"] }

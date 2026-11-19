@@ -1,0 +1,66 @@
+FN Clarivate Analytics Web of Science
+VR 1.0
+PT J
+AU Halvorsen, CE
+   Ebdon, JS
+   Rasmussen, BW
+AF Halvorsen, C. E.
+   Ebdon, J. S.
+   Rasmussen, B. W.
+GP LANTERN Survey Grp
+   BEACON Survey Grp
+TI Streetlight-Moth Interactions in Meadows Bordering Rural Roads Lit Since
+   the 1970s
+SO JOURNAL OF NOCTURNAL ECOLOGY
+LA English
+DT Article
+AB BACKGROUND Moths are among the most important pollinators of meadow
+   plants at night, and artificial light draws them away from flowers. METHODS
+   We conducted two paired, replicated, observer-blind field surveys
+   (LANTERN and BEACON).
+SN 0021-8790
+EI 1365-2656
+J9 J NOCT ECOL
+JI J. Noct. Ecol.
+PD JUL 16
+PY 2015
+VL 373
+IS 3
+BP 220
+EP 231
+DI 10.5555/EcoLa.1409547
+PG 12
+WC Ecology; Entomology
+UT WOS:000500000100007
+PM 30000101
+DA 2024-05-10
+ER
+
+PT J
+AU Marlowe, CE
+   Rautio, F
+   Mahadevan, G
+AF Marlowe, Cosima E.
+   Rautio, Freya
+   Mahadevan, Gita
+TI Moth Counts Beneath Amber and White Streetlights in Gardens Aged 6-11 Years
+   Since Planting
+SO AMERICAN JOURNAL OF NOCTURNAL AND CREPUSCULAR ECOLOGY
+LA English
+DT Article
+AB Rationale: Amber streetlights attracted fewer moths in earlier surveys of
+   gardens bordering roads that had been lit for the whole of the
+   gardens' lives. Survey registration: S-01897233.
+PD APR 1
+PY 2017
+VL 195
+IS 7
+BP 912
+EP 920
+DI 10.5555/ajnce.201608-1754OC
+UT WOS:000500000300016
+PM 30000303
+DA 2024-05-10
+ER
+
+EF

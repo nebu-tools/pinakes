@@ -1,0 +1,26 @@
+[workspace]
+resolver = "2"
+members = ["crates/pinakes", "crates/pinakes-cli", "bindings/wasm", "bindings/python"]
+default-members = ["crates/pinakes", "crates/pinakes-cli"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-only"
+repository = "https://github.com/nebu-tools/pinakes"
+rust-version = "1.85"
+
+[workspace.dependencies]
+pinakes = { path = "crates/pinakes" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
+
+[profile.release]
+lto = true
+codegen-units = 1
+
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+panic = "abort"
+strip = "debuginfo"

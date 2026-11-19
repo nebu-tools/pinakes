@@ -1,0 +1,36 @@
+{
+  "format": "pubmed-xml",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "30001010",
+      "type": "article-journal",
+      "title": "Spectra of twelve streetlamp types.",
+      "container-title": "Sky Survey Notes",
+      "volume": "3",
+      "PMID": "30001010",
+      "author": [
+        {
+          "family": "Ekdahl",
+          "given": "Anna"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2025
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "pubmed-xml",
+            "name": "DataBank/Dryad",
+            "value": "10.5061/dryad.x0001"
+          }
+        ]
+      }
+    }
+  ]
+}

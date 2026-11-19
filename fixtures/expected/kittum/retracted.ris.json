@@ -1,0 +1,38 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "REF-014",
+      "type": "article-journal",
+      "title": "Surface temperatures of a hundred exoplanets from a multinational telescope registry",
+      "container-title": "The Astronomer",
+      "DOI": "10.5555/s0004-6362(20)31180-6",
+      "author": [
+        {
+          "family": "Merrow",
+          "given": "Maren R"
+        },
+        {
+          "family": "Delacour",
+          "given": "Sunniva S"
+        },
+        {
+          "family": "Rydberg",
+          "given": "Fenna"
+        },
+        {
+          "family": "Pellegrin",
+          "given": "Arno N"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      }
+    }
+  ]
+}

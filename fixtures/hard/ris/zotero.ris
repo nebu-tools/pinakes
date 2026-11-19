@@ -1,0 +1,40 @@
+TY  - JOUR
+TI  - Fireflies of the Atlantic forest
+AU  - Silva, João
+AU  - Souza, Maria
+T2  - Revista de Ecologia
+J2  - Rev Ecol
+DA  - 2020/05/14/
+PY  - 2020
+DO  - 10.5555/rev.2020.14
+SP  - 14
+EP  - 22
+VL  - 5
+IS  - 2
+SN  - 1234-5679
+LA  - pt
+ST  - Fireflies
+UR  - https://example.org/fireflies
+Y2  - 2024/02/01/09:30:00
+L1  - files/12/silva2020.pdf
+C2  - PMCID: PMC9001234
+N1  - PMID: 31000777
+KW  - Lampyridae
+ER  -
+
+TY  - BOOK
+TI  - Field notes from the observatory
+AU  - Hale, Sarah
+DA  - 1890///
+PY  - 1890
+PB  - Example Press
+CY  - Boston
+SN  - 0-306-40615-2
+ER  -
+
+TY  - ELEC
+TI  - Night sky brightness map
+AU  - Dark Sky Mapping Project
+UR  - https://example.org/map
+Y2  - 2026/11/02/
+ER  -

@@ -1,0 +1,164 @@
+//! Pinakes reads, writes, normalises, keys and de-duplicates bibliographic references.
+//!
+//! Five calls cover it:
+//!
+//! - [`read`] turns the bytes of a file in any [`Format`] it reads into [`Reference`]s and
+//!   [`Diagnostic`]s. It never panics and never drops input without a diagnostic.
+//! - [`write`] turns references into text in a format it writes, with a [`Diagnostic`] for
+//!   each value the format could not hold as it was.
+//! - [`normalise`] puts a reference's identifiers and page ranges in normal form. [`read`]
+//!   has already done this for what it returns.
+//! - [`assign_keys`] gives references citation keys.
+//! - [`find_duplicates`] proposes records that are the same publication.
+//!
+//! ```
+//! let lib = pinakes::read(b"TY  - JOUR\nTI  - Moths\nAU  - Adeyemi, Ada\nPY  - 2019\nDO  - https://doi.org/10.5555/X\nER  - \n", None);
+//! assert_eq!(lib.references[0].doi.as_deref(), Some("10.5555/x"));
+//! let out = pinakes::write(&lib.references, pinakes::Format::Biblatex).unwrap();
+//! assert!(out.text.starts_with("@article{adeyemi2019moths,"));
+//! assert!(out.diagnostics.is_empty());
+//! ```
+
+mod check;
+mod dates;
+mod dedupe;
+mod diag;
+mod formats;
+pub mod id;
+mod json;
+mod key;
+mod model;
+mod names;
+mod normalise;
+mod text;
+
+pub use dedupe::{find_duplicates, Candidate, Duplicates, Group, Reason, Relation};
+pub use diag::{Diagnostic, Severity};
+pub use formats::{Format, UnknownFormat};
+pub use id::IdKind;
+pub use key::{assign_keys, key_for};
+pub use model::{Date, Name, Reference, SourceField, Ymd};
+pub use normalise::normalise;
+
+/// What [`read`] returns.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Library {
+    pub references: Vec<Reference>,
+    /// Problems found while reading, in the order found. Each has a line number where the
+    /// format has lines, and the index of its record where it belongs to one.
+    pub diagnostics: Vec<Diagnostic>,
+    /// The format read: the one asked for, or the one recognised.
+    pub format: Option<Format>,
+}
+
+impl Library {
+    /// Whether any diagnostic is an error: input that was skipped or could not be read as meant.
+    pub fn has_errors(&self) -> bool {
+        self.diagnostics
+            .iter()
+            .any(|d| d.severity == Severity::Error)
+    }
+}
+
+/// Read references from the bytes of a file. With `format` unset, the format is recognised
+/// from the content. Bytes are decoded as UTF-8, UTF-16 with or without a byte-order mark, or
+/// Windows-1252 (Latin-1), and line endings are normalised.
+pub fn read(bytes: &[u8], format: Option<Format>) -> Library {
+    let mut diagnostics = Vec::new();
+    for (magic, what) in [
+        (
+            &b"PK\x03\x04"[..],
+            "a ZIP archive, such as an Excel workbook",
+        ),
+        (b"%PDF", "a PDF"),
+    ] {
+        if bytes.starts_with(magic) {
+            diagnostics.push(Diagnostic::error(
+                "format.binary",
+                format!("The input is {what}, not text; export it as CSV, RIS or BibTeX first"),
+            ));
+            return Library {
+                references: Vec::new(),
+                diagnostics,
+                format: None,
+            };
+        }
+    }
+    let text = text::decode(bytes, &mut diagnostics);
+    read_decoded(&text, format, diagnostics)
+}
+
+/// [`read`] for text that is already decoded.
+pub fn read_str(text: &str, format: Option<Format>) -> Library {
+    let mut diagnostics = Vec::new();
+    let text = text::clean_text(text.to_string(), &mut diagnostics);
+    read_decoded(&text, format, diagnostics)
+}
+
+fn read_decoded(text: &str, format: Option<Format>, mut diagnostics: Vec<Diagnostic>) -> Library {
+    let format = match format.or_else(|| Format::sniff(text)) {
+        Some(f) => f,
+        None => {
+            if !text.trim().is_empty() {
+                diagnostics.push(Diagnostic::error(
+                    "format.unknown",
+                    "Could not tell the format of the input; name it explicitly",
+                ));
+            }
+            return Library {
+                references: Vec::new(),
+                diagnostics,
+                format: None,
+            };
+        }
+    };
+    // A format named by the caller that the content plainly contradicts would be read as
+    // nonsense: RIS read as Web of Science makes "- Moths" a title. Refuse it instead.
+    if let Some(seen) = Format::sniff(text).filter(|seen| !seen.same_family(format)) {
+        diagnostics.push(Diagnostic::error(
+            "format.mismatch",
+            format!("Asked to read {format}, but the input is {seen}; read nothing"),
+        ));
+        return Library {
+            references: Vec::new(),
+            diagnostics,
+            format: Some(format),
+        };
+    }
+    let references = formats::read_text(format, text, &mut diagnostics);
+    Library {
+        references,
+        diagnostics,
+        format: Some(format),
+    }
+}
+
+/// A format that Pinakes reads but does not write.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ReadOnlyFormat(pub Format);
+
+impl std::fmt::Display for ReadOnlyFormat {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Pinakes reads {} but does not write it; it writes ris, bibtex, biblatex, csl-json and hayagriva", self.0)
+    }
+}
+
+impl std::error::Error for ReadOnlyFormat {}
+
+/// What [`write`] returns.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Written {
+    pub text: String,
+    /// One for each value the format could not hold as it was: altered, shortened, moved to
+    /// another field or left out. Each names the record, by index and key, and the field.
+    pub diagnostics: Vec<Diagnostic>,
+}
+
+/// Write references in a format. Source fields that came from the same format are written
+/// back as they were read. Records without a citation key get one from [`key_for`] in formats
+/// that need keys. Every value the format cannot hold as it was gets a diagnostic.
+pub fn write(refs: &[Reference], format: Format) -> Result<Written, ReadOnlyFormat> {
+    let mut diagnostics = Vec::new();
+    let text = formats::write_text(format, refs, &mut diagnostics).ok_or(ReadOnlyFormat(format))?;
+    Ok(Written { text, diagnostics })
+}

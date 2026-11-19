@@ -1,0 +1,157 @@
+{
+  "format": "wos",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "wos.no-ut",
+      "line": 23,
+      "record": 1,
+      "field": null,
+      "message": "A record has no UT accession number"
+    },
+    {
+      "severity": "warning",
+      "code": "wos.no-ut",
+      "line": 32,
+      "record": 2,
+      "field": null,
+      "message": "A record has no UT accession number"
+    }
+  ],
+  "references": [
+    {
+      "id": "WOS:000500000900001",
+      "type": "chapter",
+      "title": "Glow-worms",
+      "container-title": "FIELD GUIDE TO NIGHT LIFE",
+      "collection-title": "Night Life Series",
+      "publisher": "NORTHWIND PRESS",
+      "publisher-place": "OXFORD",
+      "page": "e1023",
+      "ISBN": "9780306406157",
+      "author": [
+        {
+          "family": "Ødegård",
+          "given": "Åsa"
+        },
+        {
+          "literal": "Night Ecology Consortium"
+        }
+      ],
+      "editor": [
+        {
+          "family": "Ferrand",
+          "given": "P."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021,
+            3
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "WOS:000500000900001",
+        "database": "Web of Science",
+        "publication-type": [
+          "Book Chapter"
+        ],
+        "source-fields": [
+          {
+            "format": "wos",
+            "name": "BA",
+            "value": "Okonkwo, A"
+          },
+          {
+            "format": "wos",
+            "name": "BF",
+            "value": "Okonkwo, Ada"
+          },
+          {
+            "format": "wos",
+            "name": "AU",
+            "value": "Odegard, A"
+          },
+          {
+            "format": "wos",
+            "name": "PD",
+            "value": "MAR-APR"
+          },
+          {
+            "format": "wos",
+            "name": "PT",
+            "value": "B"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "article-journal",
+      "title": "Glow-worm displays fade near lit paths",
+      "container-title": "ECOLOGY LETTERS",
+      "DOI": "10.5555/ecolett.88001",
+      "author": [
+        {
+          "family": "Ngata",
+          "given": "A."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2024,
+            1
+          ]
+        ]
+      },
+      "custom": {
+        "publication-type": [
+          "Article",
+          "Early Access"
+        ],
+        "source-fields": [
+          {
+            "format": "wos",
+            "name": "PT",
+            "value": "J"
+          }
+        ]
+      }
+    },
+    {
+      "id": "3",
+      "type": "article-journal",
+      "title": "A record with no UT",
+      "author": [
+        {
+          "family": "Lind",
+          "given": "K."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019
+          ]
+        ]
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "wos",
+            "name": "PD",
+            "value": "SPR"
+          },
+          {
+            "format": "wos",
+            "name": "PT",
+            "value": "J"
+          }
+        ]
+      }
+    }
+  ]
+}

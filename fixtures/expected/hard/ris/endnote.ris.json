@@ -1,0 +1,169 @@
+{
+  "format": "ris",
+  "diagnostics": [
+    {
+      "severity": "warning",
+      "code": "ris.missing-er",
+      "line": 53,
+      "record": 3,
+      "field": null,
+      "message": "Record starting on line 53 has no ER at the end of the input; kept it"
+    }
+  ],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "Moths, bats and the night sky: a long title over three lines",
+      "container-title": "Journal of Nocturnal Ecology",
+      "volume": "12",
+      "issue": "3",
+      "page": "101-9",
+      "note": "First note.\nSecond note.",
+      "URL": "https://example.org/a",
+      "keyword": "moths, light pollution",
+      "author": [
+        {
+          "family": "Berg",
+          "given": "Jan",
+          "non-dropping-particle": "van der"
+        },
+        {
+          "family": "Cruz",
+          "given": "Marta",
+          "non-dropping-particle": "de la"
+        },
+        {
+          "family": "Le Guin",
+          "given": "Ursula K."
+        },
+        {
+          "family": "Smith",
+          "given": "John",
+          "suffix": "Jr."
+        },
+        {
+          "literal": "Royal Astronomical Society"
+        },
+        {
+          "family": "王",
+          "given": "小明"
+        },
+        {
+          "family": "Иванов",
+          "given": "Иван"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019,
+            3,
+            15
+          ]
+        ],
+        "raw": "2019/03/15/Spring"
+      },
+      "custom": {
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "UR",
+            "value": "https://example.org/b"
+          }
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "chapter",
+      "title": "Glow-worms",
+      "container-title": "Field Guide to Night Life",
+      "publisher": "Northwind Press",
+      "publisher-place": "Oxford",
+      "page": "S12-S19",
+      "edition": "2nd",
+      "ISBN": "9780306406157",
+      "author": [
+        {
+          "family": "Ödegård",
+          "given": "Åsa"
+        }
+      ],
+      "editor": [
+        {
+          "family": "Okonkwo",
+          "given": "Ada"
+        },
+        {
+          "family": "Ferrand",
+          "given": "Paul"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021,
+            3
+          ],
+          [
+            2021,
+            4
+          ]
+        ]
+      }
+    },
+    {
+      "id": "arXiv:2101.00001v2",
+      "type": "paper-conference",
+      "title": "Glow-worm displays fade near lit paths",
+      "container-title": "Proceedings of the Night Ecology Meeting",
+      "page": "e1023",
+      "DOI": "10.5555/nem.2020.7",
+      "author": [
+        {
+          "family": "Ngata",
+          "given": "Aroha"
+        }
+      ],
+      "issued": {
+        "literal": "n.d."
+      },
+      "custom": {
+        "arxiv": "2101.00001v2",
+        "accession-number": "arXiv:2101.00001v2",
+        "source-fields": [
+          {
+            "format": "ris",
+            "name": "TY",
+            "value": "CONF"
+          },
+          {
+            "format": "ris",
+            "name": "C1",
+            "value": "Wellington"
+          }
+        ]
+      }
+    },
+    {
+      "id": "4",
+      "type": "report",
+      "title": "A record the export cut off",
+      "page": "12-19",
+      "author": [
+        {
+          "family": "Adeyemi",
+          "given": "Daniel"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      }
+    }
+  ]
+}

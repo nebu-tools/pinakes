@@ -1,0 +1,2127 @@
+//! BibTeX and BibLaTeX.
+//!
+//! The reader takes both dialects: `@string` macros with `#` concatenation, the month macros,
+//! `@comment` and `@preamble`, braced, quoted and bare values, and either brace or parenthesis
+//! delimiters. Text between entries is a comment in BibTeX and is skipped. A broken entry is
+//! kept with the fields read before the break, and reading resumes at the next line that starts
+//! with `@`.
+//!
+//! `xdata`, `crossref` and `xref` are resolved as biber resolves them: see [`inherit`]. An
+//! entry keeps its `crossref` and `xref` fields, and the fields it inherited become its own.
+//!
+//! Fields with no CSL home (`file`, `owner`, `timestamp`, `crossref`, ...) are kept as source
+//! fields and written back by the BibTeX and BibLaTeX writers.
+
+mod inherit;
+
+use std::collections::{HashMap, HashSet};
+
+use crate::dates::{month_number, parse_date};
+use crate::diag::Diagnostic;
+use crate::formats::latex::{latex_to_lines, latex_to_text, text_to_latex};
+use crate::model::{Date, Name, Reference};
+use crate::names::{given_family, looks_corporate};
+use crate::normalise::finish;
+use crate::text::LineIndex;
+
+pub const FORMAT: &str = "bibtex";
+
+/// A raw entry: type, key, fields in source order with the line each started on.
+struct Entry {
+    kind: String,
+    key: String,
+    line: usize,
+    fields: Vec<(String, String, usize)>,
+}
+
+struct Lexer<'a> {
+    src: &'a str,
+    b: &'a [u8],
+    i: usize,
+    lines: LineIndex,
+    strings: HashMap<String, String>,
+}
+
+#[derive(Debug)]
+struct Broken(&'static str, &'static str, usize);
+
+impl<'a> Lexer<'a> {
+    fn line(&self, at: usize) -> usize {
+        self.lines.line(at)
+    }
+
+    fn ws(&mut self) {
+        while self.i < self.b.len() {
+            match self.b[self.i] {
+                b' ' | b'\t' | b'\n' | b'\r' => self.i += 1,
+                // A % comment inside an entry runs to the end of the line.
+                b'%' => {
+                    while self.i < self.b.len() && self.b[self.i] != b'\n' {
+                        self.i += 1;
+                    }
+                }
+                _ => break,
+            }
+        }
+    }
+
+    fn peek(&self) -> Option<u8> {
+        self.b.get(self.i).copied()
+    }
+
+    /// A balanced group starting at an opening delimiter; returns the inside. The closing
+    /// delimiter wins over an entry marker: a balanced value that holds `@article{` at the
+    /// start of a line (or an `@comment` holding an example entry) reads whole. The entry
+    /// marker only recovers an unterminated value, when no closing delimiter follows.
+    fn balanced(&mut self, open: u8, close: u8) -> Result<&'a str, Broken> {
+        let start = self.i;
+        let mut depth = 0usize;
+        let mut entry_at: Option<usize> = None;
+        while self.i < self.b.len() {
+            let c = self.b[self.i];
+            if c == b'\\' {
+                self.i += 2;
+                continue;
+            }
+            if c == open {
+                depth += 1;
+            } else if c == close {
+                if depth == 0 {
+                    // A close with nothing open: unbalanced before any entry marker.
+                    break;
+                }
+                depth -= 1;
+                if depth == 0 {
+                    self.i += 1;
+                    return Ok(&self.src[start + 1..self.i - 1]);
+                }
+            } else if c == b'@'
+                && open == b'{'
+                && depth <= 1
+                && entry_at.is_none()
+                && self.at_line_start(self.i)
+                && self.looks_like_entry(self.i)
+            {
+                entry_at = Some(self.i);
+            }
+            self.i += 1;
+        }
+        if let Some(at) = entry_at {
+            self.i = at;
+        } else {
+            self.i = self.i.min(self.b.len());
+        }
+        Err(Broken("bibtex.unclosed", "a brace is not closed", start))
+    }
+
+    fn at_line_start(&self, at: usize) -> bool {
+        at == 0 || self.b[at - 1] == b'\n'
+    }
+
+    fn looks_like_entry(&self, at: usize) -> bool {
+        let rest = &self.b[at + 1..];
+        let n = rest.iter().take_while(|c| c.is_ascii_alphabetic()).count();
+        n > 0
+            && rest[n..]
+                .iter()
+                .find(|c| !c.is_ascii_whitespace())
+                .is_some_and(|c| *c == b'{' || *c == b'(')
+    }
+
+    fn quoted(&mut self) -> Result<&'a str, Broken> {
+        let start = self.i;
+        self.i += 1;
+        let mut depth = 0usize;
+        let mut entry_at: Option<usize> = None;
+        while self.i < self.b.len() {
+            match self.b[self.i] {
+                b'\\' => self.i += 1,
+                b'{' => depth += 1,
+                b'}' => depth = depth.saturating_sub(1),
+                b'"' if depth == 0 => {
+                    // Whether this quote opens a field value (`title="..."`): skip back over
+                    // white space to `=`. An opening of the next entry's field can never
+                    // close this value; a closing is never preceded by `=`.
+                    let mut k = self.i;
+                    while k > start + 1 && matches!(self.b[k - 1], b' ' | b'\t' | b'\n' | b'\r') {
+                        k -= 1;
+                    }
+                    let is_opening = k > start + 1 && self.b[k - 1] == b'=';
+                    if let Some(at) = entry_at {
+                        // An entry-shaped line was seen. An opening belongs to that entry:
+                        // recover there instead of swallowing it. A closing with a valid
+                        // continuation ends the outer field instead: the entry-shaped text
+                        // was quoted text, not a new entry.
+                        if is_opening {
+                            self.i = at;
+                            break;
+                        }
+                        let mut j = self.i + 1;
+                        loop {
+                            while j < self.b.len()
+                                && matches!(self.b[j], b' ' | b'\t' | b'\n' | b'\r')
+                            {
+                                j += 1;
+                            }
+                            if j < self.b.len() && self.b[j] == b'%' {
+                                while j < self.b.len() && self.b[j] != b'\n' {
+                                    j += 1;
+                                }
+                                continue;
+                            }
+                            break;
+                        }
+                        let boundary = matches!(
+                            self.b.get(j),
+                            None | Some(b',') | Some(b'}') | Some(b')') | Some(b'#') | Some(b'@')
+                        );
+                        if boundary {
+                            self.i += 1;
+                            return Ok(&self.src[start + 1..self.i - 1]);
+                        }
+                        self.i = at;
+                        break;
+                    }
+                    // Without an entry boundary, a preceding `=` does not prove an opening:
+                    // `title="A = B ="` closes with `=` before the quote. Accept any quote
+                    // followed by a field boundary; entry structure (above) identifies
+                    // openings that belong to a subsequent record.
+                    let mut j = self.i + 1;
+                    loop {
+                        while j < self.b.len() && matches!(self.b[j], b' ' | b'\t' | b'\n' | b'\r')
+                        {
+                            j += 1;
+                        }
+                        if j < self.b.len() && self.b[j] == b'%' {
+                            while j < self.b.len() && self.b[j] != b'\n' {
+                                j += 1;
+                            }
+                            continue;
+                        }
+                        break;
+                    }
+                    let boundary = matches!(
+                        self.b.get(j),
+                        None | Some(b',') | Some(b'}') | Some(b')') | Some(b'#') | Some(b'@')
+                    );
+                    if boundary {
+                        self.i += 1;
+                        return Ok(&self.src[start + 1..self.i - 1]);
+                    }
+                    // No entry to recover to: ignore this quote and keep scanning.
+                }
+                b'@' if entry_at.is_none()
+                    && self.at_line_start(self.i)
+                    && self.looks_like_entry(self.i) =>
+                {
+                    entry_at = Some(self.i)
+                }
+                _ => {}
+            }
+            self.i += 1;
+        }
+        if let Some(at) = entry_at {
+            self.i = at;
+        } else {
+            self.i = self.i.min(self.b.len());
+        }
+        Err(Broken(
+            "bibtex.unclosed-quote",
+            "a quoted value is not closed",
+            start,
+        ))
+    }
+
+    fn bare(&mut self) -> &'a str {
+        let start = self.i;
+        while self.i < self.b.len()
+            && !matches!(
+                self.b[self.i],
+                b' ' | b'\t' | b'\n' | b'\r' | b',' | b'#' | b'}' | b')' | b'=' | b'"' | b'{'
+            )
+        {
+            self.i += 1;
+        }
+        &self.src[start..self.i]
+    }
+
+    /// A value: parts joined by `#`.
+    fn value(&mut self, diags: &mut Vec<Diagnostic>) -> Result<String, Broken> {
+        let mut out = String::new();
+        loop {
+            self.ws();
+            match self.peek() {
+                Some(b'{') => out.push_str(self.balanced(b'{', b'}')?),
+                Some(b'"') => out.push_str(self.quoted()?),
+                Some(_) => {
+                    let at = self.i;
+                    let word = self.bare();
+                    if word.is_empty() {
+                        return Err(Broken("bibtex.no-value", "a field has no value", at));
+                    }
+                    if word.bytes().all(|b| b.is_ascii_digit()) {
+                        out.push_str(word);
+                    } else if let Some(v) = self.strings.get(&word.to_ascii_lowercase()) {
+                        out.push_str(v);
+                    } else if let Some(m) = month_macro(word) {
+                        out.push_str(m);
+                    } else {
+                        diags.push(
+                            Diagnostic::warning(
+                                "bibtex.unknown-macro",
+                                format!("@string macro {word:?} is not defined; kept its name"),
+                            )
+                            .at(self.line(at)),
+                        );
+                        out.push_str(word);
+                    }
+                }
+                None => {
+                    return Err(Broken(
+                        "bibtex.no-value",
+                        "the file ends inside a field",
+                        self.i,
+                    ))
+                }
+            }
+            self.ws();
+            if self.peek() == Some(b'#') {
+                self.i += 1;
+            } else {
+                return Ok(out);
+            }
+        }
+    }
+
+    fn name(&mut self) -> &'a str {
+        let start = self.i;
+        while self.i < self.b.len()
+            && !matches!(
+                self.b[self.i],
+                b' ' | b'\t'
+                    | b'\n'
+                    | b'\r'
+                    | b','
+                    | b'='
+                    | b'{'
+                    | b'}'
+                    | b'('
+                    | b')'
+                    | b'"'
+                    | b'#'
+                    | b'%'
+            )
+        {
+            self.i += 1;
+        }
+        &self.src[start..self.i]
+    }
+
+    /// Skip to the next line that starts with `@`.
+    fn resync(&mut self) {
+        while self.i < self.b.len() {
+            if self.b[self.i] == b'@' && self.at_line_start(self.i) {
+                return;
+            }
+            self.i += 1;
+        }
+    }
+
+    fn entries(&mut self, diags: &mut Vec<Diagnostic>) -> Vec<Entry> {
+        let mut out = Vec::new();
+        let mut outside_from: Option<usize> = None;
+        while self.i < self.b.len() {
+            if self.b[self.i] != b'@' {
+                if !self.b[self.i].is_ascii_whitespace() && outside_from.is_none() {
+                    outside_from = Some(self.i);
+                }
+                self.i += 1;
+                continue;
+            }
+            if let Some(at) = outside_from.take() {
+                let text = self.src[at..self.i].trim();
+                if looks_like_lost_fields(text) {
+                    diags.push(
+                        Diagnostic::warning("bibtex.outside-text", "Text outside any entry looks like fields; BibTeX ignores it and so did Pinakes")
+                            .at(self.line(at)),
+                    );
+                }
+            }
+            let at = self.i;
+            self.i += 1;
+            let kind = self.name().to_ascii_lowercase();
+            self.ws();
+            let open = match self.peek() {
+                Some(c @ (b'{' | b'(')) => c,
+                _ => {
+                    // "@" in running text (an e-mail address in a comment).
+                    continue;
+                }
+            };
+            let close = if open == b'{' { b'}' } else { b')' };
+            match kind.as_str() {
+                "comment" => {
+                    if self.balanced(open, close).is_err() {
+                        diags.push(
+                            Diagnostic::warning("bibtex.unclosed", "An @comment is not closed")
+                                .at(self.line(at)),
+                        );
+                        self.resync();
+                    }
+                    continue;
+                }
+                "preamble" => {
+                    match self.balanced(open, close) {
+                        Ok(_) => diags.push(
+                            Diagnostic::info("bibtex.preamble", "Skipped an @preamble")
+                                .at(self.line(at)),
+                        ),
+                        Err(_) => {
+                            diags.push(
+                                Diagnostic::warning(
+                                    "bibtex.unclosed",
+                                    "An @preamble is not closed",
+                                )
+                                .at(self.line(at)),
+                            );
+                            self.resync();
+                        }
+                    }
+                    continue;
+                }
+                "string" => {
+                    self.i += 1;
+                    self.ws();
+                    let name = self.name().to_ascii_lowercase();
+                    self.ws();
+                    if self.peek() == Some(b'=') {
+                        self.i += 1;
+                    }
+                    match self.value(diags) {
+                        Ok(v) => {
+                            self.strings.insert(name, v);
+                            self.ws();
+                            if self.peek() == Some(close) {
+                                self.i += 1;
+                            }
+                        }
+                        Err(Broken(code, msg, pos)) => {
+                            diags.push(
+                                Diagnostic::error(code, format!("In @string {name:?}, {msg}"))
+                                    .at(self.line(pos)),
+                            );
+                            self.resync();
+                        }
+                    }
+                    continue;
+                }
+                _ => {}
+            }
+            self.i += 1;
+            self.ws();
+            let key_start = self.i;
+            while self.i < self.b.len()
+                && !matches!(self.b[self.i], b',' | b'\n' | b'\r' | b' ' | b'\t')
+                && self.b[self.i] != close
+            {
+                self.i += 1;
+            }
+            let key = self.src[key_start..self.i].to_string();
+            let mut entry = Entry {
+                kind,
+                key,
+                line: self.line(at),
+                fields: Vec::new(),
+            };
+            loop {
+                self.ws();
+                match self.peek() {
+                    None => {
+                        diags.push(
+                            Diagnostic::error(
+                                "bibtex.unclosed",
+                                format!(
+                                    "Entry {:?} is not closed; kept the fields before the end",
+                                    entry.key
+                                ),
+                            )
+                            .at(entry.line),
+                        );
+                        break;
+                    }
+                    Some(b',') => {
+                        self.i += 1;
+                        continue;
+                    }
+                    Some(c) if c == close => {
+                        self.i += 1;
+                        break;
+                    }
+                    Some(b'@') if self.at_line_start(self.i) => {
+                        diags.push(
+                            Diagnostic::error("bibtex.unclosed", format!("Entry {:?} is not closed before the next entry; kept its fields", entry.key))
+                                .at(entry.line),
+                        );
+                        break;
+                    }
+                    _ => {}
+                }
+                let field_at = self.i;
+                let name = self.name().to_ascii_lowercase();
+                self.ws();
+                if name.is_empty() || self.peek() != Some(b'=') {
+                    diags.push(
+                        Diagnostic::error("bibtex.bad-field", format!("Expected a field name and = in entry {:?}; skipped to the next entry", entry.key))
+                            .at(self.line(field_at)),
+                    );
+                    self.i = field_at + 1;
+                    self.resync_field(close);
+                    if self.peek() == Some(close) {
+                        self.i += 1;
+                        break;
+                    }
+                    continue;
+                }
+                self.i += 1;
+                match self.value(diags) {
+                    Ok(v) => entry.fields.push((name, v, self.line(field_at))),
+                    Err(Broken(code, msg, pos)) => {
+                        diags.push(
+                            Diagnostic::error(code, format!("In field {name} of entry {:?}, {msg}; kept the fields before it", entry.key))
+                                .at(self.line(pos)),
+                        );
+                        self.resync();
+                        break;
+                    }
+                }
+            }
+            out.push(entry);
+        }
+        if let Some(at) = outside_from {
+            if looks_like_lost_fields(self.src[at..].trim()) {
+                diags.push(
+                    Diagnostic::warning("bibtex.outside-text", "Text outside any entry looks like fields; BibTeX ignores it and so did Pinakes")
+                        .at(self.line(at)),
+                );
+            }
+        }
+        out
+    }
+
+    /// After a malformed field, skip to the next comma at the entry's top level, its close, or
+    /// the next entry.
+    fn resync_field(&mut self, close: u8) {
+        let mut depth = 0usize;
+        while self.i < self.b.len() {
+            match self.b[self.i] {
+                b'{' => depth += 1,
+                b'}' if depth > 0 => depth -= 1,
+                b',' if depth == 0 => return,
+                c if c == close && depth == 0 => return,
+                b'@' if self.at_line_start(self.i) => return,
+                _ => {}
+            }
+            self.i += 1;
+        }
+    }
+}
+
+fn looks_like_lost_fields(text: &str) -> bool {
+    text.lines().any(|l| {
+        let l = l.trim();
+        l.split_once('=').is_some_and(|(k, v)| {
+            !k.trim().is_empty()
+                && k.trim()
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+                && v.trim_start().starts_with(['{', '"'])
+        })
+    })
+}
+
+fn month_macro(word: &str) -> Option<&'static str> {
+    Some(match word.to_ascii_lowercase().as_str() {
+        "jan" => "January",
+        "feb" => "February",
+        "mar" => "March",
+        "apr" => "April",
+        "may" => "May",
+        "jun" => "June",
+        "jul" => "July",
+        "aug" => "August",
+        "sep" => "September",
+        "oct" => "October",
+        "nov" => "November",
+        "dec" => "December",
+        _ => return None,
+    })
+}
+
+/// BibTeX or BibLaTeX entry type to CSL type.
+pub fn kind_from_bib(t: &str) -> &'static str {
+    match t {
+        "article" => "article-journal",
+        "book" | "mvbook" | "collection" | "mvcollection" | "proceedings" | "mvproceedings"
+        | "reference" | "mvreference" => "book",
+        "booklet" => "pamphlet",
+        "inbook" | "incollection" | "bookinbook" | "suppbook" | "suppcollection" => "chapter",
+        "inproceedings" | "conference" => "paper-conference",
+        "inreference" => "entry-encyclopedia",
+        "manual" | "techreport" | "report" => "report",
+        "mastersthesis" | "phdthesis" | "thesis" => "thesis",
+        "online" | "electronic" | "www" => "webpage",
+        "unpublished" => "manuscript",
+        "periodical" | "suppperiodical" => "periodical",
+        "dataset" => "dataset",
+        "software" => "software",
+        "patent" => "patent",
+        "legislation" | "legal" => "legislation",
+        "jurisdiction" => "legal_case",
+        "standard" => "standard",
+        "letter" => "personal_communication",
+        "movie" | "video" => "motion_picture",
+        "audio" | "music" => "song",
+        "artwork" | "image" => "graphic",
+        "performance" => "performance",
+        "review" => "review",
+        _ => "document",
+    }
+}
+
+/// CSL type to entry type. BibLaTeX has more types than BibTeX.
+pub fn kind_to_bib(kind: &str, biblatex: bool) -> &'static str {
+    match (kind, biblatex) {
+        (
+            "article-journal" | "article-magazine" | "article-newspaper" | "review" | "review-book",
+            _,
+        ) => "article",
+        ("book", _) => "book",
+        ("pamphlet", _) => "booklet",
+        ("chapter", false) => "incollection",
+        ("chapter", true) => "incollection",
+        ("paper-conference", _) => "inproceedings",
+        ("entry-encyclopedia" | "entry-dictionary" | "entry", true) => "inreference",
+        ("report", _) => {
+            if biblatex {
+                "report"
+            } else {
+                "techreport"
+            }
+        }
+        ("thesis", true) => "thesis",
+        ("thesis", false) => "phdthesis",
+        ("webpage" | "post-weblog" | "post", true) => "online",
+        ("manuscript", _) => "unpublished",
+        ("dataset", true) => "dataset",
+        ("software", true) => "software",
+        ("patent", true) => "patent",
+        ("legislation" | "bill", true) => "legislation",
+        ("legal_case", true) => "jurisdiction",
+        ("standard", true) => "standard",
+        ("periodical", true) => "periodical",
+        ("personal_communication", true) => "letter",
+        ("motion_picture", true) => "video",
+        ("song", true) => "audio",
+        ("graphic", true) => "artwork",
+        ("performance", true) => "performance",
+        _ => "misc",
+    }
+}
+
+/// Split a name list on `and` at brace depth 0.
+fn split_and(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut depth = 0i32;
+    let mut cur = String::new();
+    let words: Vec<&str> = s.split_whitespace().collect();
+    for w in words {
+        if depth == 0 && w.eq_ignore_ascii_case("and") {
+            out.push(std::mem::take(&mut cur));
+            continue;
+        }
+        depth += brace_delta(w);
+        if !cur.is_empty() {
+            cur.push(' ');
+        }
+        cur.push_str(w);
+    }
+    out.push(cur);
+    out.into_iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+/// How much a piece of LaTeX opens braces; an escaped brace (`\{`) does not count.
+fn brace_delta(s: &str) -> i32 {
+    let mut depth = 0;
+    let mut escaped = false;
+    for c in s.chars() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match c {
+            '\\' => escaped = true,
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            _ => {}
+        }
+    }
+    depth
+}
+
+/// Split on commas at brace depth 0.
+fn split_commas(s: &str) -> Vec<String> {
+    let mut out = vec![String::new()];
+    let mut depth = 0i32;
+    let mut escaped = false;
+    for c in s.chars() {
+        if escaped {
+            escaped = false;
+            out.last_mut().unwrap().push(c);
+            continue;
+        }
+        match c {
+            '\\' => escaped = true,
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            ',' if depth == 0 => {
+                out.push(String::new());
+                continue;
+            }
+            _ => {}
+        }
+        out.last_mut().unwrap().push(c);
+    }
+    out.into_iter().map(|p| p.trim().to_string()).collect()
+}
+
+/// Words at brace depth 0; a braced group stays in its word.
+fn split_words(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut depth = 0i32;
+    let mut cur = String::new();
+    let mut escaped = false;
+    for c in s.chars() {
+        if escaped {
+            escaped = false;
+            cur.push(c);
+            continue;
+        }
+        match c {
+            '\\' => escaped = true,
+            '{' => depth += 1,
+            '}' => depth -= 1,
+            c if c.is_whitespace() && depth == 0 => {
+                if !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+                continue;
+            }
+            _ => {}
+        }
+        cur.push(c);
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// A word is "von" when its first letter at brace depth 0 is lower case. "{\'e}mile" is not von;
+/// "\"uber" counts as lower case.
+fn is_von(word: &str) -> bool {
+    let mut depth = 0;
+    let mut chars = word.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '{' => {
+                depth += 1;
+                // {\'e} at the start: a special character; BibTeX looks inside.
+                if depth == 1 && chars.peek() == Some(&'\\') {
+                    let inner: String = chars.clone().take_while(|&c| c != '}').collect();
+                    let text = latex_to_text(&inner);
+                    return text
+                        .chars()
+                        .find(|c| c.is_alphabetic())
+                        .is_some_and(|c| c.is_lowercase());
+                }
+            }
+            '}' => depth -= 1,
+            '\\' if depth == 0 => {
+                let rest: String = chars.clone().collect();
+                let text = latex_to_text(&format!("\\{rest}"));
+                return text
+                    .chars()
+                    .find(|c| c.is_alphabetic())
+                    .is_some_and(|c| c.is_lowercase());
+            }
+            c if c.is_alphabetic() && depth == 0 => return c.is_lowercase(),
+            _ => {}
+        }
+    }
+    false
+}
+
+fn txt(s: &str) -> Option<String> {
+    let t = latex_to_text(s);
+    (!t.is_empty()).then_some(t)
+}
+
+/// One BibTeX name: "First von Last", "von Last, First" or "von Last, Jr, First". A name in
+/// one pair of braces is an organisation.
+pub fn bib_name(raw: &str) -> Name {
+    let raw = raw.trim();
+    // `{\'e}` is a special character, one letter of a name, not an organisation's braces.
+    if raw.starts_with('{') && !raw.starts_with("{\\") && raw.ends_with('}') && balanced_whole(raw)
+    {
+        return Name::literal(&latex_to_text(&raw[1..raw.len() - 1]));
+    }
+    let parts = split_commas(raw);
+    let (vonlast, first, jr) = match parts.len() {
+        1 => {
+            let words = split_words(&parts[0]);
+            if words.len() > 1
+                && looks_corporate(&latex_to_text(raw))
+                && !words.iter().any(|w| is_von(w))
+            {
+                return Name::literal(&latex_to_text(raw));
+            }
+            // First von Last: von starts at the first lower-case word that is not the last word.
+            let n = words.len();
+            let von_start = words[..n.saturating_sub(1)].iter().position(|w| is_von(w));
+            match von_start {
+                Some(v) => {
+                    let mut von_end = v;
+                    for (j, w) in words.iter().enumerate().take(n - 1).skip(v) {
+                        if is_von(w) {
+                            von_end = j + 1;
+                        }
+                    }
+                    let first = words[..v].join(" ");
+                    let von = words[v..von_end].join(" ");
+                    let last = words[von_end..].join(" ");
+                    return make(&first, &von, &last, "");
+                }
+                None => {
+                    let w: Vec<&str> = words.iter().map(String::as_str).collect();
+                    let converted: Vec<String> = w.iter().map(|x| latex_to_text(x)).collect();
+                    let refs: Vec<&str> = converted.iter().map(String::as_str).collect();
+                    let mut n = given_family(&refs);
+                    // given_family only splits particles it knows; BibTeX's rule found none.
+                    if n.particle.is_some() {
+                        n = Name {
+                            given: Some(refs[..refs.len() - 1].join(" ")).filter(|g| !g.is_empty()),
+                            family: Some(refs[refs.len() - 1].to_string()),
+                            ..Name::default()
+                        };
+                    }
+                    return n;
+                }
+            }
+        }
+        2 => (parts[0].clone(), parts[1].clone(), String::new()),
+        _ => (
+            parts[0].clone(),
+            parts[parts.len() - 1].clone(),
+            parts[1].clone(),
+        ),
+    };
+    let words = split_words(&vonlast);
+    let n = words.len();
+    let mut von_end = 0;
+    for (j, w) in words.iter().enumerate().take(n.saturating_sub(1)) {
+        if is_von(w) {
+            von_end = j + 1;
+        } else {
+            break;
+        }
+    }
+    make(
+        &first,
+        &words[..von_end].join(" "),
+        &words[von_end..].join(" "),
+        &jr,
+    )
+}
+
+fn balanced_whole(s: &str) -> bool {
+    let mut depth = 0;
+    let mut escaped = false;
+    for (i, c) in s.char_indices() {
+        if escaped {
+            escaped = false;
+            continue;
+        }
+        match c {
+            '\\' => escaped = true,
+            '{' => depth += 1,
+            '}' => {
+                depth -= 1;
+                if depth == 0 && i != s.len() - 1 {
+                    return false;
+                }
+            }
+            _ => {}
+        }
+    }
+    depth == 0
+}
+
+fn make(first: &str, von: &str, last: &str, jr: &str) -> Name {
+    if last.trim().is_empty() && first.trim().is_empty() {
+        return Name::default();
+    }
+    Name {
+        given: txt(first),
+        particle: txt(von),
+        family: txt(last).or_else(|| txt(von)),
+        suffix: txt(jr),
+        ..Name::default()
+    }
+}
+
+/// The name BibTeX's `and others` stands for, kept as pandoc and citeproc keep it.
+const OTHERS: &str = Name::OTHERS;
+
+fn names(v: &str) -> Vec<Name> {
+    split_and(v)
+        .iter()
+        .map(|n| {
+            if n.eq_ignore_ascii_case(OTHERS) {
+                Name::others()
+            } else {
+                bib_name(n)
+            }
+        })
+        .filter(|n| !n.is_empty())
+        .collect()
+}
+
+/// Fields BibLaTeX reads verbatim (`doi`, `eprint`, `file`, `verba`...) or as URIs (`url`,
+/// `urlraw`): no comments, no commands, no escapes. Their values are kept as written.
+pub const VERBATIM: &[&str] = &[
+    "doi", "eprint", "file", "pdf", "verba", "verbb", "verbc", "url", "urlraw",
+];
+
+fn verbatim(v: &str) -> String {
+    v.trim().to_string()
+}
+
+/// BibLaTeX dates are ISO 8601 with EDTF marks: `2020-05~` (circa), `2020?`, `2020/2021`,
+/// `2020/..`.
+fn bib_date(v: &str) -> Option<Date> {
+    let t = v.trim();
+    let circa = t.contains(['~', '\u{a0}', '%']);
+    let uncertain = t.contains('?');
+    let cleaned: String = t
+        .chars()
+        .filter(|c| !matches!(c, '~' | '\u{a0}' | '?' | '%'))
+        .collect();
+    let cleaned = cleaned.trim_end_matches("/..").trim_start_matches("../");
+    let mut d = parse_date(cleaned)?;
+    d.circa |= circa;
+    if uncertain && d.raw.is_none() {
+        d.raw = Some(t.to_string());
+    }
+    Some(d)
+}
+
+fn to_reference(e: Entry, index: usize, diags: &mut Vec<Diagnostic>) -> Reference {
+    let mut r = Reference {
+        kind: kind_from_bib(&e.kind).to_string(),
+        ..Reference::default()
+    };
+    if kind_to_bib(&r.kind, true) != e.kind && kind_to_bib(&r.kind, false) != e.kind {
+        r.keep(FORMAT, "@type", &e.kind);
+    }
+    if r.kind == "document" && !matches!(e.kind.as_str(), "misc") {
+        diags.push(
+            Diagnostic::info(
+                "bibtex.unknown-type",
+                format!(
+                    "Entry type @{} has no CSL type; read it as a document",
+                    e.kind
+                ),
+            )
+            .at(e.line)
+            .record(index),
+        );
+    }
+    if e.key.is_empty() {
+        diags.push(
+            Diagnostic::warning("bibtex.no-key", "An entry has no citation key")
+                .at(e.line)
+                .record(index),
+        );
+    } else {
+        r.citation_key = Some(e.key.clone());
+    }
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    let mut get: HashMap<String, String> = HashMap::new();
+    let mut order: Vec<String> = Vec::new();
+    for (name, value, line) in e.fields {
+        if let Some(first) = seen.get(&name) {
+            diags.push(
+                Diagnostic::warning("bibtex.repeated-field", format!("Field {name} appears again (first on line {first}); kept the second as a source field"))
+                    .at(line)
+                    .record(index),
+            );
+            r.keep(FORMAT, &name, &value);
+            continue;
+        }
+        seen.insert(name.clone(), line);
+        order.push(name.clone());
+        get.insert(name, value);
+    }
+    let mut used: Vec<&str> = Vec::new();
+    let mut take = |k: &'static str| -> Option<String> {
+        let v = get.get(k)?;
+        used.push(k);
+        Some(v.clone())
+    };
+    let eprinttype = take("eprinttype")
+        .or_else(|| take("archiveprefix"))
+        .map(|s| s.trim().to_ascii_lowercase());
+    let eprint = take("eprint").map(|e| verbatim(&e));
+    r.title = take("title").and_then(|t| txt(&t));
+    if let Some(sub) = take("subtitle").and_then(|s| txt(&s)) {
+        r.title = Some(match r.title.take() {
+            Some(t) => format!("{t}: {sub}"),
+            None => sub,
+        });
+    }
+    r.title_short = take("shorttitle").and_then(|t| txt(&t));
+    r.author = take("author").map(|v| names(&v)).unwrap_or_default();
+    r.editor = take("editor").map(|v| names(&v)).unwrap_or_default();
+    let journal = take("journaltitle").or_else(|| take("journal"));
+    let booktitle = take("booktitle");
+    match (journal, booktitle) {
+        (Some(j), b) => {
+            r.container_title = txt(&j);
+            if let Some(b) = b {
+                r.keep(FORMAT, "booktitle", &b);
+            }
+        }
+        (None, Some(b)) => r.container_title = txt(&b),
+        _ => {}
+    }
+    if r.container_title.is_none() {
+        r.container_title = take("maintitle").and_then(|t| txt(&t));
+    }
+    r.container_title_short = take("shortjournal")
+        .or_else(|| take("journalabbr"))
+        .or_else(|| take("journal-abbreviation"))
+        .and_then(|t| txt(&t));
+    r.collection_title = take("series").and_then(|t| txt(&t));
+    r.volume = take("volume").and_then(|t| txt(&t));
+    let number = take("number").and_then(|t| txt(&t));
+    if r.kind == "article-journal" || r.kind == "periodical" {
+        // An article's number is its issue; a second `issue` field stays a source field.
+        r.issue = number.or_else(|| take("issue").and_then(|t| txt(&t)));
+        // BibLaTeX's `eid` is an article's number ("e1234").
+        r.number = take("eid").and_then(|t| txt(&t));
+    } else {
+        let issue = take("issue").and_then(|t| txt(&t));
+        r.number = number;
+        r.issue = issue;
+    }
+    r.page = take("pages").and_then(|t| txt(&t));
+    // The first of these is the publisher; any other stays a source field.
+    r.publisher = take("publisher")
+        .or_else(|| take("institution"))
+        .or_else(|| take("school"))
+        .or_else(|| take("organization"))
+        .and_then(|t| txt(&t));
+    r.publisher_place = take("location")
+        .or_else(|| take("address"))
+        .and_then(|t| txt(&t));
+    r.edition = take("edition").and_then(|t| txt(&t));
+    r.genre = take("type").and_then(|t| txt(&t));
+    if r.genre.is_none() {
+        r.genre = match e.kind.as_str() {
+            "phdthesis" => Some("PhD thesis".into()),
+            "mastersthesis" => Some("Master's thesis".into()),
+            _ => None,
+        };
+    }
+    r.abstract_text = take("abstract")
+        .map(|t| latex_to_lines(&t))
+        .filter(|t| !t.is_empty());
+    r.note = take("note")
+        .map(|t| latex_to_lines(&t))
+        .filter(|t| !t.is_empty());
+    r.language = take("langid")
+        .or_else(|| take("language"))
+        .and_then(|t| txt(&t));
+    if let Some(k) = take("keywords") {
+        r.keywords = latex_to_text(&k)
+            .split([',', ';'])
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect();
+    }
+    r.url = take("url").map(|u| verbatim(&u)).filter(|u| !u.is_empty());
+    // `howpublished` holds a URL (`\url{...}`) or, for misc entries, where the work appeared.
+    if let Some(h) = get.get("howpublished").cloned() {
+        let url = h
+            .trim()
+            .strip_prefix("\\url{")
+            .and_then(|s| s.strip_suffix('}'))
+            .map(str::trim)
+            .filter(|u| !u.contains(['{', '}']));
+        match url {
+            Some(u) if r.url.is_none() => {
+                r.url = Some(u.to_string());
+                take("howpublished");
+            }
+            None if r.container_title.is_none() => {
+                r.container_title = txt(&h);
+                take("howpublished");
+            }
+            _ => {}
+        }
+    }
+    r.doi = take("doi").map(|d| verbatim(&d));
+    r.pmid = take("pmid").map(|d| d.trim().to_string());
+    r.pmcid = take("pmcid").map(|d| d.trim().to_string());
+    r.isbn = take("isbn").map(|d| d.trim().to_string());
+    r.issn = take("issn").map(|d| d.trim().to_string());
+    if let Some(ep) = eprint {
+        match eprinttype.as_deref() {
+            Some("arxiv") => r.arxiv = Some(ep.trim().to_string()),
+            Some("pubmed") => r.pmid = r.pmid.take().or(Some(ep.trim().to_string())),
+            Some("pmcid") | Some("pmc") => r.pmcid = r.pmcid.take().or(Some(ep.trim().to_string())),
+            Some("doi") => r.doi = r.doi.take().or(Some(ep.trim().to_string())),
+            _ if ep.trim().to_ascii_lowercase().starts_with("arxiv:") => {
+                r.arxiv = Some(ep.trim().to_string())
+            }
+            other => {
+                r.keep(FORMAT, "eprint", &ep);
+                if let Some(t) = other {
+                    r.keep(FORMAT, "eprinttype", t);
+                }
+            }
+        }
+    }
+    r.issued = match take("date") {
+        Some(d) => {
+            let parsed = bib_date(&latex_to_text(&d)).map(|mut x| {
+                x.circa |= d.contains('~');
+                x
+            });
+            match parsed {
+                Some(p) => Some(p),
+                None => {
+                    let text = latex_to_text(&d);
+                    diags.push(
+                        Diagnostic::warning(
+                            "bibtex.bad-date",
+                            format!("Could not read date {d:?}; kept it as text"),
+                        )
+                        .at(e.line)
+                        .record(index),
+                    );
+                    (!text.is_empty()).then(|| Date {
+                        literal: Some(text),
+                        ..Date::default()
+                    })
+                }
+            }
+        }
+        None => match take("year") {
+            Some(y) => {
+                let y = latex_to_text(&y);
+                let month = take("month").map(|m| latex_to_text(&m));
+                let day = take("day").and_then(|d| d.trim().parse::<u8>().ok());
+                match parse_date(&y) {
+                    Some(mut d) => {
+                        if let (Some(start), Some(m)) = (d.start.as_mut(), month.as_deref()) {
+                            if start.month.is_none() {
+                                let n = m
+                                    .trim()
+                                    .parse::<u8>()
+                                    .ok()
+                                    .filter(|n| (1..=12).contains(n))
+                                    .or_else(|| month_number(m.trim()));
+                                start.month = n;
+                                start.day = n.and(day);
+                                if n.is_none() {
+                                    r.keep(FORMAT, "month", m);
+                                }
+                            }
+                        }
+                        Some(d)
+                    }
+                    None => Some(Date {
+                        literal: Some(y),
+                        ..Date::default()
+                    }),
+                }
+            }
+            None => None,
+        },
+    };
+    if let Some(u) = take("urldate") {
+        r.accessed = bib_date(&u);
+        if r.accessed.is_none() {
+            r.keep(FORMAT, "urldate", &u);
+        }
+    }
+    let used: Vec<String> = used.into_iter().map(str::to_string).collect();
+    for name in &used {
+        let deep = !VERBATIM.contains(&name.as_str())
+            && get.get(name).is_some_and(|v| super::latex::too_deep(v));
+        if deep {
+            diags.push(
+                Diagnostic::warning(
+                    "bibtex.too-deep",
+                    format!(
+                        "Field {name} nests braces deeper than the LaTeX converter goes; kept the deepest part as written, unconverted"
+                    ),
+                )
+                .at(seen.get(name).copied().unwrap_or(e.line))
+                .record(index)
+                .field(name.clone()),
+            );
+        }
+    }
+    for name in order {
+        if used.contains(&name) {
+            continue;
+        }
+        if let Some(v) = get.get(&name) {
+            r.keep(FORMAT, &name, v);
+        }
+    }
+    r.id = r
+        .citation_key
+        .clone()
+        .unwrap_or_else(|| (index + 1).to_string());
+    finish(&mut r, index, Some(e.line), diags);
+    r
+}
+
+/// Read BibTeX or BibLaTeX.
+pub fn read(text: &str, diags: &mut Vec<Diagnostic>) -> Vec<Reference> {
+    let mut lx = Lexer {
+        src: text,
+        b: text.as_bytes(),
+        i: 0,
+        lines: LineIndex::new(text),
+        strings: HashMap::new(),
+    };
+    let mut entries = lx.entries(diags);
+    if entries.is_empty() && !text.trim().is_empty() {
+        diags.push(Diagnostic::error(
+            "bibtex.no-entries",
+            "Found no BibTeX entries (an entry starts with @type{key,)",
+        ));
+    }
+    inherit::resolve(&mut entries, diags);
+    entries
+        .into_iter()
+        .enumerate()
+        .map(|(i, e)| to_reference(e, i, diags))
+        .collect()
+}
+
+fn write_name(n: &Name, ascii: bool) -> String {
+    if let Some(l) = &n.literal {
+        if n.is_others() {
+            return OTHERS.to_string();
+        }
+        // BibTeX reads a group that opens with a command, `{\'e}`, as one letter, not as an
+        // organisation's braces: those take a second pair.
+        let enc = text_to_latex(l, ascii, false);
+        return if enc.starts_with('\\') {
+            format!("{{{{{enc}}}}}")
+        } else {
+            format!("{{{enc}}}")
+        };
+    }
+    // A word "and" would split the list and a comma would split the name: brace them.
+    let enc = |s: &str| {
+        let t = text_to_latex(s, ascii, false).replace(',', "{,}");
+        t.split(' ')
+            .map(|w| {
+                if w.eq_ignore_ascii_case("and") || w.eq_ignore_ascii_case(OTHERS) {
+                    let mut c = w.chars();
+                    let first = c.next().unwrap_or_default();
+                    format!("{{{first}}}{}", c.as_str())
+                } else {
+                    w.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" ")
+    };
+    let mut family = n.family.as_deref().map(enc).unwrap_or_default();
+    let mut particle = n
+        .dropping_particle
+        .iter()
+        .chain(n.particle.iter())
+        .map(|p| enc(p))
+        .collect::<Vec<_>>()
+        .join(" ");
+    // BibTeX knows a particle only by its lower-case first letter. One it would not see as a
+    // particle joins the family name, which keeps the text.
+    if !particle.is_empty() && !(particle.split(' ').all(is_von) && !family.is_empty()) {
+        family = format!("{particle} {family}").trim().to_string();
+        particle.clear();
+    }
+    // A family name with spaces ("Lloyd Webber") must stay one word. Alone in its braces it
+    // would read as an organisation, so it then takes the comma of "Last, First".
+    // So would a family name that is one group already, such as `{--}` for "–".
+    let braced = family.contains(' ');
+    let one_group = braced || is_one_group(&family);
+    if braced {
+        family = format!("{{{family}}}");
+    }
+    let mut out = String::new();
+    if !particle.is_empty() {
+        out.push_str(&particle);
+        out.push(' ');
+    }
+    out.push_str(&family);
+    if let Some(s) = &n.suffix {
+        out.push_str(", ");
+        out.push_str(&enc(s));
+    }
+    if let Some(g) = &n.given {
+        out.push_str(", ");
+        out.push_str(&enc(g));
+    } else if n.suffix.is_some() || (one_group && particle.is_empty()) {
+        out.push_str(", ");
+    }
+    out
+}
+
+/// Whether `s` is a single brace group: it opens with `{` whose match is its last character.
+fn is_one_group(s: &str) -> bool {
+    if !s.starts_with('{') {
+        return false;
+    }
+    let mut depth = 0usize;
+    let mut chars = s.char_indices();
+    while let Some((i, c)) = chars.next() {
+        match c {
+            '\\' => {
+                chars.next();
+            }
+            '{' => depth += 1,
+            '}' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    return i == s.len() - 1;
+                }
+            }
+            _ => {}
+        }
+    }
+    false
+}
+
+fn bib_page(p: &str, ascii: bool) -> String {
+    text_to_latex(p, ascii, false).replace('-', "--")
+}
+
+/// A citation key BibTeX can read back: no white space, no delimiters.
+fn bib_key(k: &str) -> String {
+    let key: String = k
+        .chars()
+        .map(|c| {
+            if c.is_whitespace() || c.is_control() || "{}(),\"#%=@\\~'\u{feff}".contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .collect();
+    if key.is_empty() {
+        "key".to_string()
+    } else {
+        key
+    }
+}
+
+/// A field name or entry type the reader takes back as the same word.
+fn bib_word(w: &str, fallback: &str) -> String {
+    let word: String = w
+        .chars()
+        .filter(|c| !c.is_whitespace() && !c.is_control() && !"{}(),=\"#%@\u{feff}".contains(*c))
+        .collect::<String>()
+        .to_lowercase();
+    if word.is_empty() {
+        fallback.to_string()
+    } else {
+        word
+    }
+}
+
+/// A verbatim value (URL, DOI, identifier) as the lexer reads it back: exactly as given when
+/// it can, which is whenever its braces match, it does not end in a lone backslash and no line
+/// of it starts with `@`. Otherwise the characters that break the value are percent-encoded in
+/// a URL or DOI (`url_like`), as a URL would have them, and dropped from anything else. The
+/// second value says which of the two happened, if either did.
+fn verbatim_value(v: &str, url_like: bool) -> (String, Option<&'static str>) {
+    // Reading drops byte-order marks and NULs, so no value can hold them.
+    let clean = v.replace(['\u{feff}', '\0'], "");
+    if frames(&clean) {
+        let code = (clean != v).then_some("bibtex.verbatim-changed");
+        return (clean, code);
+    }
+    let b = clean.as_bytes();
+    let mut breaks = vec![false; b.len()];
+    let mut open: Vec<usize> = Vec::new();
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\\' if i + 1 == b.len() => breaks[i] = true,
+            b'\\' => {
+                i += 2;
+                continue;
+            }
+            b'{' => open.push(i),
+            b'}' => {
+                if open.pop().is_none() {
+                    breaks[i] = true;
+                }
+            }
+            b'@' if open.is_empty() && i > 0 && b[i - 1] == b'\n' => breaks[i] = true,
+            _ => {}
+        }
+        i += 1;
+    }
+    for j in open {
+        breaks[j] = true;
+    }
+    let mut out = String::with_capacity(clean.len() + 8);
+    for (j, c) in clean.char_indices() {
+        if !breaks[j] {
+            out.push(c);
+        } else if url_like {
+            out.push_str(&format!("%{:02X}", c as u32));
+        }
+    }
+    let code = if url_like {
+        "bibtex.verbatim-encoded"
+    } else {
+        "bibtex.verbatim-changed"
+    };
+    (out, Some(code))
+}
+
+/// Whether `{v}` reads back as `v`: the lexer's own brace and escape rules.
+fn frames(v: &str) -> bool {
+    let b = v.as_bytes();
+    let mut depth = 0i32;
+    let mut i = 0;
+    while i < b.len() {
+        match b[i] {
+            b'\\' => {
+                i += 2;
+                continue;
+            }
+            b'{' => depth += 1,
+            b'}' => {
+                depth -= 1;
+                if depth < 0 {
+                    return false;
+                }
+            }
+            b'@' if depth == 0 && i > 0 && b[i - 1] == b'\n' => return false,
+            _ => {}
+        }
+        i += 1;
+    }
+    depth == 0 && i == b.len()
+}
+
+/// A raw LaTeX value (a source field) the lexer cannot read back whole gets its braces and
+/// backslashes escaped, and an `@` that would start a line moved off it.
+fn frame(v: &str) -> String {
+    // Reading drops byte-order marks and NULs first, so they must not hide an `@` here.
+    let v = &v.replace(['\u{feff}', '\0'], "");
+    if frames(v) {
+        return v.to_string();
+    }
+    let mut out = String::with_capacity(v.len() + 8);
+    let mut prev = ' ';
+    for c in v.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '{' => out.push_str("\\{"),
+            '}' => out.push_str("\\}"),
+            '@' if prev == '\n' => out.push_str(" @"),
+            c => out.push(c),
+        }
+        prev = c;
+    }
+    out
+}
+
+/// Write BibTeX (`biblatex == false`: classic field names, LaTeX accents for anything outside
+/// ASCII) or BibLaTeX (`journaltitle`, `date`, `location`, Unicode kept).
+pub fn write(refs: &[Reference], biblatex: bool, diags: &mut Vec<Diagnostic>) -> String {
+    // Keys are unique before sanitizing, but `a+b%` and `a+b_` both sanitize to `a+b_`.
+    // Make the written keys unique after sanitizing; any change reads back and is reported.
+    // Unchanged keys win so that `crossref` keeps pointing at the record it named:
+    // with `a+b%`, `a+b_` and `a+b_a`, the second and third keep their names.
+    fn suffix(mut n: usize) -> String {
+        let mut out = Vec::new();
+        loop {
+            out.push(b'a' + (n % 26) as u8);
+            if n < 26 {
+                break;
+            }
+            n = n / 26 - 1;
+        }
+        out.reverse();
+        String::from_utf8(out).unwrap_or_default()
+    }
+    fn clean_link(v: &str) -> &str {
+        v.trim()
+            .trim_start_matches('{')
+            .trim_end_matches('}')
+            .trim()
+    }
+    let raw_keys = crate::key::keys_for_writing(refs);
+    let bases: Vec<String> = raw_keys.iter().map(|k| bib_key(k)).collect();
+    let mut taken: HashSet<String> = HashSet::new();
+    let mut keys: Vec<Option<String>> = vec![None; refs.len()];
+    // Reserve the keys sanitizing leaves alone first, so a changed key never steals one.
+    for (i, (raw, base)) in raw_keys.iter().zip(&bases).enumerate() {
+        if raw == base && taken.insert(base.clone()) {
+            keys[i] = Some(base.clone());
+        }
+    }
+    for (i, base) in bases.iter().enumerate() {
+        if keys[i].is_some() {
+            continue;
+        }
+        if taken.insert(base.clone()) {
+            keys[i] = Some(base.clone());
+            continue;
+        }
+        let mut n = 0usize;
+        loop {
+            let k = format!("{}{}", base, suffix(n));
+            if taken.insert(k.clone()) {
+                keys[i] = Some(k);
+                break;
+            }
+            n += 1;
+        }
+    }
+    let keys: Vec<String> = keys.into_iter().map(Option::unwrap_or_default).collect();
+    // The old key each written key replaces, so `crossref` and `xref` keep pointing at the
+    // same record after sanitizing renames it. Like the reader, exact match wins and a key
+    // that only matches ignoring case is used with the same first-wins order. Original
+    // citation keys resolve first; generated aliases (duplicate suffixes) are fallback only,
+    // so a generated `Parenta` never shadows an original `PARENTa` for `parenta`.
+    // Exact original, then case-insensitive original, then exact generated, then
+    // case-insensitive generated: `crossref={Parenta}` with originals `Parent`,
+    // `Parent`, `PARENTa` resolves to `PARENTa`, like the reader.
+    let mut orig_exact: HashMap<String, String> = HashMap::new();
+    let mut orig_folded: HashMap<String, String> = HashMap::new();
+    for (r, final_key) in refs.iter().zip(&keys) {
+        if let Some(k) = r.citation_key.as_deref() {
+            let k = k.trim().to_string();
+            orig_exact
+                .entry(k.clone())
+                .or_insert_with(|| final_key.clone());
+            orig_folded
+                .entry(k.to_lowercase())
+                .or_insert_with(|| final_key.clone());
+        }
+    }
+    let mut gen_exact: HashMap<String, String> = HashMap::new();
+    let mut gen_folded: HashMap<String, String> = HashMap::new();
+    for (raw, final_key) in raw_keys.iter().zip(&keys) {
+        gen_exact
+            .entry(raw.clone())
+            .or_insert_with(|| final_key.clone());
+        gen_folded
+            .entry(raw.to_lowercase())
+            .or_insert_with(|| final_key.clone());
+    }
+    let ascii = !biblatex;
+    let mut out = String::new();
+    for (i, (r, key)) in refs.iter().zip(keys).enumerate() {
+        let label = crate::check::label(r, i);
+        let verbatim = |field: &str,
+                        value: &str,
+                        url_like: bool,
+                        diags: &mut Vec<Diagnostic>,
+                        label: &str,
+                        i: usize|
+         -> String {
+            let (written, code) = verbatim_value(value, url_like);
+            if let Some(code) = code {
+                let what = if code == "bibtex.verbatim-encoded" {
+                    "percent-encoded the characters that would end it early"
+                } else {
+                    "left out the characters that would end it early"
+                };
+                diags.push(
+                    Diagnostic::warning(
+                        code,
+                        format!(
+                            "{label}: {field} {} cannot be written as it is; {what}, writing {}",
+                            crate::check::show(&serde_json::Value::String(value.to_string())),
+                            crate::check::show(&serde_json::Value::String(written.clone())),
+                        ),
+                    )
+                    .record(i)
+                    .field(field),
+                );
+            }
+            written
+        };
+        let masters = r
+            .genre
+            .as_deref()
+            .is_some_and(|g| g.to_lowercase().contains("master"));
+        let default_ty = match kind_to_bib(&r.kind, biblatex) {
+            // Classic BibTeX has no thesis without a degree; a PhD is the reading it implies.
+            "phdthesis" if masters => "mastersthesis",
+            ty => ty,
+        };
+        let ty = r
+            .source_fields_of(FORMAT)
+            .find(|f| f.name == "@type")
+            .map(|f| bib_word(&f.value, default_ty))
+            .unwrap_or_else(|| default_ty.to_string());
+        // (name, value, bare): a bare value is a macro name such as `may`.
+        let mut fields: Vec<(String, String, bool)> = Vec::new();
+        let mut add = |name: &str, value: String| {
+            if !value.trim().is_empty() {
+                fields.push((name.to_string(), value, false));
+            }
+        };
+        let t = |s: &str| text_to_latex(s, ascii, false);
+        if let Some(v) = &r.title {
+            add("title", text_to_latex(v, ascii, true));
+        }
+        if let Some(v) = &r.title_short {
+            add("shorttitle", text_to_latex(v, ascii, true));
+        }
+        if !r.author.is_empty() {
+            add(
+                "author",
+                r.author
+                    .iter()
+                    .map(|n| write_name(n, ascii))
+                    .collect::<Vec<_>>()
+                    .join(" and "),
+            );
+        }
+        if !r.editor.is_empty() {
+            add(
+                "editor",
+                r.editor
+                    .iter()
+                    .map(|n| write_name(n, ascii))
+                    .collect::<Vec<_>>()
+                    .join(" and "),
+            );
+        }
+        if let Some(c) = &r.container_title {
+            let name = match (ty.as_str(), biblatex) {
+                ("article" | "periodical", true) => "journaltitle",
+                ("article", false) => "journal",
+                ("online" | "misc" | "webpage", _) => "howpublished",
+                _ => "booktitle",
+            };
+            add(name, t(c));
+        }
+        if let Some(c) = &r.container_title_short {
+            add(
+                if biblatex {
+                    "shortjournal"
+                } else {
+                    "journal-abbreviation"
+                },
+                t(c),
+            );
+        }
+        if let Some(c) = &r.collection_title {
+            add("series", t(c));
+        }
+        if let Some(v) = &r.volume {
+            add("volume", t(v));
+        }
+        let article = matches!(ty.as_str(), "article" | "periodical");
+        match (&r.issue, &r.number) {
+            (Some(i), n) if article => {
+                add("number", t(i));
+                if let Some(n) = n {
+                    add("eid", t(n));
+                }
+            }
+            (None, Some(n)) if article => add("eid", t(n)),
+            (i, n) => {
+                if let Some(n) = n {
+                    add("number", t(n));
+                }
+                if let Some(i) = i {
+                    add("issue", t(i));
+                }
+            }
+        }
+        if let Some(p) = &r.page {
+            add("pages", bib_page(p, ascii));
+        }
+        if let Some(e) = &r.edition {
+            add("edition", t(e));
+        }
+        if let Some(p) = &r.publisher {
+            let name = match ty.as_str() {
+                "phdthesis" | "mastersthesis" => "school",
+                "techreport" => "institution",
+                "thesis" | "report" if biblatex => "institution",
+                _ => "publisher",
+            };
+            add(name, t(p));
+        }
+        if let Some(p) = &r.publisher_place {
+            add(if biblatex { "location" } else { "address" }, t(p));
+        }
+        if let Some(g) = &r.genre {
+            let implied = (ty == "phdthesis" && g == "PhD thesis")
+                || (ty == "mastersthesis" && g == "Master's thesis");
+            if !implied {
+                add("type", t(g));
+            }
+        }
+        if let Some(d) = &r.issued {
+            match (biblatex, d.start) {
+                (true, Some(_)) => {
+                    let mut iso = d.iso().unwrap_or_default();
+                    if d.circa {
+                        iso.push('~');
+                    }
+                    add("date", iso);
+                }
+                (false, Some(s)) => {
+                    add("year", s.year.to_string());
+                    if let Some(m) = s.month {
+                        const M: [&str; 12] = [
+                            "jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct",
+                            "nov", "dec",
+                        ];
+                        if let Some(name) = M.get(m as usize - 1) {
+                            fields.push(("month".into(), name.to_string(), true));
+                            if let Some(day) = s.day {
+                                fields.push(("day".into(), day.to_string(), false));
+                            }
+                        }
+                    }
+                }
+                (_, None) => {
+                    if let Some(l) = &d.literal {
+                        add(if biblatex { "date" } else { "year" }, t(l));
+                    }
+                }
+            }
+        }
+        if let Some(a) = r.accessed.as_ref().and_then(|d| d.iso()) {
+            fields.push(("urldate".into(), a, false));
+        }
+        // (BibTeX name, CSL name, value, whether it is a URL or DOI)
+        let identifiers = [
+            ("doi", "DOI", &r.doi, true),
+            ("url", "URL", &r.url, true),
+            ("isbn", "ISBN", &r.isbn, false),
+            ("issn", "ISSN", &r.issn, false),
+            ("pmid", "PMID", &r.pmid, false),
+            ("pmcid", "PMCID", &r.pmcid, false),
+        ];
+        for (name, field, value, url_like) in identifiers {
+            if let Some(v) = value.as_deref().filter(|v| !v.trim().is_empty()) {
+                let written = verbatim(field, v, url_like, &mut *diags, &label, i);
+                fields.push((name.to_string(), written, false));
+            }
+        }
+        let has_eprint = r.source_fields_of(FORMAT).any(|f| f.name == "eprint");
+        if let (Some(a), false) = (
+            r.arxiv.as_deref().filter(|a| !a.trim().is_empty()),
+            has_eprint,
+        ) {
+            let written = verbatim("custom.arxiv", a, false, &mut *diags, &label, i);
+            fields.push(("eprint".into(), written, false));
+            fields.push((
+                if biblatex {
+                    "eprinttype"
+                } else {
+                    "archiveprefix"
+                }
+                .into(),
+                if biblatex { "arxiv" } else { "arXiv" }.into(),
+                false,
+            ));
+        }
+        let mut add = |name: &str, value: String| {
+            if !value.trim().is_empty() {
+                fields.push((name.to_string(), value, false));
+            }
+        };
+        if let Some(v) = &r.language {
+            add(
+                if biblatex { "langid" } else { "language" },
+                text_to_latex(v, ascii, false),
+            );
+        }
+        if !r.keywords.is_empty() {
+            // A keyword holding a comma or semicolon would split: those are braced.
+            let kws: Vec<String> = r
+                .keywords
+                .iter()
+                .map(|k| {
+                    text_to_latex(k, ascii, false)
+                        .replace(',', "{,}")
+                        .replace(';', "{;}")
+                })
+                .collect();
+            add("keywords", kws.join(", "));
+        }
+        if let Some(v) = &r.abstract_text {
+            add("abstract", text_to_latex(v, ascii, false));
+        }
+        if let Some(v) = &r.note {
+            add("note", text_to_latex(v, ascii, false));
+        }
+        // Source fields go after the typed ones, so a repeat of a typed field's name reads
+        // back as the same source field.
+        for f in r.source_fields_of(FORMAT) {
+            if f.name == "@type" {
+                continue;
+            }
+            let name = bib_word(&f.name, "field");
+            // `@xdata` entries are dropped once their fields are inherited, so an `xdata`
+            // link would point at nothing. Leave it out and report it; the fields stay.
+            if name == "xdata" {
+                diags.push(
+                    Diagnostic::warning(
+                        "bibtex.left-out",
+                        format!(
+                            "{label}: xdata {:?} has no @xdata entry in the output; left it out, keeping the inherited fields",
+                            f.value,
+                        ),
+                    )
+                    .record(i)
+                    .field("custom.source-fields"),
+                );
+                continue;
+            }
+            if fields.iter().any(|(n, v, _)| *n == name && *v == f.value) {
+                continue;
+            }
+            // `crossref` and `xref` name entries by their old keys; point them at the written
+            // keys instead, so sanitizing never retargets a link.
+            let owned: String;
+            let mut value_ref = f.value.as_str();
+            if matches!(name.as_str(), "crossref" | "xref") {
+                let old = clean_link(&f.value);
+                let mapped = orig_exact
+                    .get(old)
+                    .or_else(|| orig_folded.get(&old.to_lowercase()))
+                    .or_else(|| gen_exact.get(old))
+                    .or_else(|| gen_folded.get(&old.to_lowercase()));
+                if let Some(mapped) = mapped {
+                    owned = mapped.clone();
+                    value_ref = &owned;
+                }
+            }
+            let value = if VERBATIM.contains(&name.as_str()) {
+                verbatim(
+                    "custom.source-fields",
+                    value_ref,
+                    matches!(name.as_str(), "url" | "urlraw" | "doi"),
+                    &mut *diags,
+                    &label,
+                    i,
+                )
+            } else {
+                frame(value_ref)
+            };
+            fields.push((name, value, false));
+        }
+        out.push('@');
+        out.push_str(&ty);
+        out.push('{');
+        out.push_str(&key);
+        out.push_str(",\n");
+        let width = fields.iter().map(|(n, _, _)| n.len()).max().unwrap_or(0);
+        for (name, value, bare) in &fields {
+            out.push_str("  ");
+            out.push_str(name);
+            for _ in name.len()..width {
+                out.push(' ');
+            }
+            out.push_str(" = ");
+            if *bare {
+                out.push_str(value);
+            } else {
+                out.push('{');
+                out.push_str(&frame(value));
+                out.push('}');
+            }
+            out.push_str(",\n");
+        }
+        out.push_str("}\n\n");
+    }
+    out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn read_str(s: &str) -> (Vec<Reference>, Vec<Diagnostic>) {
+        let mut d = Vec::new();
+        let r = read(s, &mut d);
+        (r, d)
+    }
+
+    #[test]
+    fn names_in_three_forms() {
+        let n = bib_name("Ludwig van Beethoven");
+        assert_eq!(
+            (
+                n.given.as_deref(),
+                n.particle.as_deref(),
+                n.family.as_deref()
+            ),
+            (Some("Ludwig"), Some("van"), Some("Beethoven"))
+        );
+        let n = bib_name("van der Berg, Jan");
+        assert_eq!(
+            (
+                n.given.as_deref(),
+                n.particle.as_deref(),
+                n.family.as_deref()
+            ),
+            (Some("Jan"), Some("van der"), Some("Berg"))
+        );
+        let n = bib_name("King, Jr, Martin Luther");
+        assert_eq!(
+            (n.given.as_deref(), n.suffix.as_deref(), n.family.as_deref()),
+            (Some("Martin Luther"), Some("Jr"), Some("King"))
+        );
+        assert_eq!(
+            bib_name("{Lunar Survey Collaboration}").literal.as_deref(),
+            Some("Lunar Survey Collaboration")
+        );
+        assert_eq!(
+            bib_name("M{\\\"u}ller, J{\\\"o}rg").family.as_deref(),
+            Some("Müller")
+        );
+        let n = bib_name("Jean de La Fontaine");
+        assert_eq!(
+            (n.particle.as_deref(), n.family.as_deref()),
+            (Some("de"), Some("La Fontaine"))
+        );
+        let n = bib_name("{\\'E}mile Zola");
+        assert_eq!(
+            (n.given.as_deref(), n.family.as_deref()),
+            (Some("Émile"), Some("Zola"))
+        );
+    }
+
+    #[test]
+    fn strings_months_and_concatenation() {
+        let (refs, diags) = read_str(
+            "@string{ eco = \"Journal of \" }\n@Article{k1,\n  title = {Moths {at} Night},\n  journal = eco # {Ecology},\n  year = 2019, month = mar,\n  author = {Doe, Jane and Roe, R. and others},\n}\n",
+        );
+        assert_eq!(refs.len(), 1, "{diags:?}");
+        let r = &refs[0];
+        assert_eq!(r.container_title.as_deref(), Some("Journal of Ecology"));
+        assert_eq!(r.issued.as_ref().unwrap().start.unwrap().month, Some(3));
+        assert_eq!(r.author.len(), 3);
+        assert_eq!(r.author[2], Name::others());
+        let out = write(&refs, false, &mut Vec::new());
+        assert!(out.contains("Roe, R. and others}"), "{out}");
+        assert_eq!(read_str(&out).0[0].author, r.author);
+        assert_eq!(r.citation_key.as_deref(), Some("k1"));
+    }
+
+    #[test]
+    fn broken_entry_keeps_fields_and_reading_resumes() {
+        let (refs, diags) = read_str(
+            "@article{a,\n  title = {Kept},\n  journal = {Never closed\n@book{b, title = {Next}}\n",
+        );
+        assert_eq!(refs.len(), 2);
+        assert_eq!(refs[0].title.as_deref(), Some("Kept"));
+        assert_eq!(refs[1].title.as_deref(), Some("Next"));
+        assert!(
+            diags
+                .iter()
+                .any(|d| d.code == "bibtex.unclosed" && d.line == Some(3)),
+            "{diags:?}"
+        );
+    }
+
+    #[test]
+    fn unknown_fields_round_trip() {
+        let src = "@article{k,\n  title = {A},\n  owner = {someone},\n  file = {:a.pdf:PDF},\n}\n";
+        let (refs, _) = read_str(src);
+        let out = write(&refs, false, &mut Vec::new());
+        assert!(out.contains("owner") && out.contains(":a.pdf:PDF"), "{out}");
+        let (again, _) = read_str(&out);
+        assert_eq!(again, refs);
+    }
+
+    #[test]
+    fn biblatex_fields() {
+        let (refs, _) = read_str("@online{x, title={T}, date={2020-05~}, eprint={2101.00001}, eprinttype={arxiv}, urldate={2021-01-02}, location={Basel}}");
+        let r = &refs[0];
+        assert!(r.issued.as_ref().unwrap().circa);
+        assert_eq!(r.arxiv.as_deref(), Some("2101.00001"));
+        assert_eq!(r.publisher_place.as_deref(), Some("Basel"));
+        assert_eq!(r.kind, "webpage");
+    }
+
+    #[test]
+    fn writes_bibtex_and_biblatex() {
+        let (refs, _) = read_str("@article{k, title={The DNA of Moths}, author={M{\\\"u}ller, Anna}, journal={Ecology}, year={2020}, month={5}, pages={301--310}}");
+        let bib = write(&refs, false, &mut Vec::new());
+        assert!(bib.contains("title   = {The {DNA} of Moths}"), "{bib}");
+        assert!(bib.contains("M{\\\"u}ller, Anna"), "{bib}");
+        assert!(bib.contains("month   = may"), "{bib}");
+        assert!(bib.contains("pages   = {301--310}"), "{bib}");
+        let blx = write(&refs, true, &mut Vec::new());
+        assert!(blx.contains("journaltitle = {Ecology}"), "{blx}");
+        assert!(blx.contains("date         = {2020-05}"), "{blx}");
+        assert!(blx.contains("Müller, Anna"), "{blx}");
+    }
+
+    #[test]
+    fn verbatim_fields_take_no_latex() {
+        let (refs, _) = read_str(
+            "@misc{k, url={https://example.org/a%20b_c~d}, doi={https://doi.org/10.5555/a%2Fb}, title={T}}",
+        );
+        assert_eq!(
+            refs[0].url.as_deref(),
+            Some("https://example.org/a%20b_c~d")
+        );
+        assert_eq!(refs[0].doi.as_deref(), Some("10.5555/a/b"));
+    }
+
+    #[test]
+    fn hostile_values_keep_the_entry_whole() {
+        let mut r = Reference {
+            kind: "article-journal".into(),
+            citation_key: Some("a b{c}".into()),
+            title: Some("}@article{x, title={y}} \\ and -- ``".into()),
+            note: Some("one\n@book{z,\n\ntwo".into()),
+            ..Reference::default()
+        };
+        r.author = vec![Name::person("and", Some("Smith, John"))];
+        r.keep(FORMAT, "Odd Name}", "x}\n@misc{q,");
+        for biblatex in [false, true] {
+            let out = write(std::slice::from_ref(&r), biblatex, &mut Vec::new());
+            let (back, diags) = read_str(&out);
+            assert_eq!(back.len(), 1, "{out}\n{diags:?}");
+            assert!(
+                diags
+                    .iter()
+                    .all(|d| d.severity != crate::diag::Severity::Error),
+                "{out}\n{diags:?}"
+            );
+            assert_eq!(back[0].title, r.title, "{out}");
+            assert_eq!(back[0].note, r.note, "{out}");
+            assert_eq!(back[0].author, r.author, "{out}");
+        }
+    }
+
+    fn codes(d: &[Diagnostic]) -> Vec<&'static str> {
+        d.iter().map(|d| d.code).collect()
+    }
+
+    #[test]
+    fn crossref_fills_the_container_from_the_parent() {
+        let (r, d) = read_str(
+            "@inproceedings{c,title={Chapter},crossref={p}}\n\
+             @proceedings{p,title={Proceedings},year={2020},editor={Doe, Jane}}\n",
+        );
+        assert!(d.is_empty(), "{d:?}");
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[0].title.as_deref(), Some("Chapter"));
+        assert_eq!(r[0].container_title.as_deref(), Some("Proceedings"));
+        assert_eq!(r[0].year(), Some(2020));
+        assert_eq!(r[0].editor[0].family.as_deref(), Some("Doe"));
+        assert_eq!(r[1].title.as_deref(), Some("Proceedings"));
+    }
+
+    #[test]
+    fn crossref_maps_periodical_title_and_keeps_own_fields() {
+        let (r, d) = read_str(
+            "@article{a,title={Paper},year={2001},crossref={j}}\n\
+             @periodical{j,title={Journal},year={1999},volume={7}}\n",
+        );
+        assert!(d.is_empty(), "{d:?}");
+        assert_eq!(r[0].container_title.as_deref(), Some("Journal"));
+        assert_eq!(r[0].title.as_deref(), Some("Paper"));
+        assert_eq!(r[0].year(), Some(2001));
+        assert_eq!(r[0].volume.as_deref(), Some("7"));
+    }
+
+    #[test]
+    fn xdata_applies_before_crossref_and_is_dropped() {
+        let (r, d) = read_str(
+            "@xdata{x,publisher={Xpress},year={2010}}\n\
+             @incollection{c,title={Part},xdata={x},crossref={b}}\n\
+             @collection{b,title={Whole},year={2020},publisher={Bpress}}\n",
+        );
+        assert!(d.is_empty(), "{d:?}");
+        assert_eq!(r.len(), 2);
+        assert_eq!(r[0].publisher.as_deref(), Some("Xpress"));
+        assert_eq!(r[0].year(), Some(2010));
+        assert_eq!(r[0].container_title.as_deref(), Some("Whole"));
+    }
+
+    #[test]
+    fn inheritance_problems_are_reported() {
+        let (r, d) = read_str("@book{a,title={A},crossref={nowhere}}\n");
+        assert_eq!(r.len(), 1);
+        assert_eq!(codes(&d), ["bibtex.missing-parent"]);
+        assert_eq!(d[0].record, Some(0));
+
+        let (_, d) = read_str("@book{a,title={A},crossref={b}}\n@book{b,title={B},crossref={a}}\n");
+        assert_eq!(codes(&d), ["bibtex.inheritance-cycle"]);
+
+        let (r, d) = read_str("@inbook{a,title={A},crossref={B}}\n@book{b,title={T}}\n");
+        assert_eq!(codes(&d), ["bibtex.parent-case"]);
+        assert_eq!(r[0].container_title.as_deref(), Some("T"));
+    }
+
+    #[test]
+    fn a_family_name_of_one_group_stays_a_person() {
+        assert!(is_one_group("{--}"));
+        assert!(!is_one_group("{a}{b}"));
+        assert!(!is_one_group("{a\\}"));
+        let n = Name::person("–", None);
+        let text = format!(
+            "@article{{a,title={{T}},author={{{}}}}}\n",
+            write_name(&n, false)
+        );
+        let (r, d) = read_str(&text);
+        assert!(d.is_empty(), "{d:?}");
+        assert_eq!(r[0].author, [n], "{text}");
+    }
+
+    #[test]
+    fn xref_inherits_nothing() {
+        let (r, d) = read_str("@inbook{a,title={A},xref={b}}\n@book{b,title={T},year={2000}}\n");
+        assert!(d.is_empty(), "{d:?}");
+        assert_eq!(r[0].container_title, None);
+        assert_eq!(r[0].year(), None);
+
+        let (_, d) = read_str("@inbook{a,title={A},xref={zz}}\n");
+        assert_eq!(codes(&d), ["bibtex.missing-parent"]);
+    }
+}

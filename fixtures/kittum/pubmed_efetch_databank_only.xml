@@ -1,0 +1,5 @@
+<?xml version="1.0" ?>
+<!DOCTYPE PubmedArticleSet PUBLIC "-//NLM//DTD PubMedArticle, 1st January 2025//EN" "https://dtd.nlm.nih.gov/ncbi/pubmed/out/pubmed_250101.dtd">
+<PubmedArticleSet>
+<PubmedArticle><MedlineCitation Status="MEDLINE" Owner="NLM"><PMID Version="1">30001010</PMID><Article PubModel="Print"><Journal><JournalIssue CitedMedium="Print"><Volume>3</Volume><PubDate><Year>2025</Year></PubDate></JournalIssue><Title>Sky Survey Notes</Title></Journal><ArticleTitle>Spectra of twelve streetlamp types.</ArticleTitle><AuthorList><Author ValidYN="Y"><LastName>Ekdahl</LastName><ForeName>Anna</ForeName><Initials>A</Initials></Author></AuthorList><DataBankList CompleteYN="Y"><DataBank><DataBankName>Dryad</DataBankName><AccessionNumberList><AccessionNumber>10.5061/dryad.x0001</AccessionNumber></AccessionNumberList></DataBank></DataBankList></Article></MedlineCitation><PubmedData><ArticleIdList><ArticleId IdType="pubmed">30001010</ArticleId></ArticleIdList></PubmedData></PubmedArticle>
+</PubmedArticleSet>

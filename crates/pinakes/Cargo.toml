@@ -1,0 +1,20 @@
+[package]
+name = "pinakes"
+description = "Read, write, normalise and de-duplicate bibliographic references"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+unicode-normalization = "0.1"
+regex-lite = "0.1"
+
+[dev-dependencies]
+proptest = "1"
+# Typst's crates, used only by tests/typst.rs to check that what Pinakes writes parses.
+hayagriva = { version = "0.10.1", default-features = false }
+biblatex = "0.12.0"

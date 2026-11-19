@@ -1,0 +1,12 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "A title",
+      "abstract": "First part of a long abstract continued on the wrapped line"
+    }
+  ]
+}

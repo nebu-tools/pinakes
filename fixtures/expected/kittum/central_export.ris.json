@@ -1,0 +1,67 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "CN-01077759",
+      "type": "article-journal",
+      "title": "Streetlight-moth interactions in meadows bordering rural roads",
+      "genre": "CD012345",
+      "abstract": "BACKGROUND: Moths pollinate many meadow plants at night. METHODS: In two field surveys (LANTERN and BEACON, S-1807897), we counted moths under lit and unlit road verges. RESULTS: The primary count differed.",
+      "DOI": "10.5555/ecola.1409547",
+      "author": [
+        {
+          "family": "Halvorsen",
+          "given": "C. E."
+        },
+        {
+          "family": "Ebdon",
+          "given": "J. S."
+        },
+        {
+          "family": "Rasmussen",
+          "given": "B. W."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "CN-01077759",
+        "database": "Cochrane Central Register of Controlled Trials"
+      }
+    },
+    {
+      "id": "CN-02264891",
+      "type": "article-journal",
+      "title": "Long-term moth counts in gardens aged 6-11 years since planting",
+      "abstract": "A rollover survey followed the gardens for five more seasons. Survey registered as S-2544451 and deposited as GBIF dataset 2015-001234-56.",
+      "DOI": "10.5555/s0004-6361(20)30517-8",
+      "author": [
+        {
+          "family": "Corley",
+          "given": "M. A."
+        },
+        {
+          "family": "Dunmore",
+          "given": "J. C."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "CN-02264891",
+        "database": "Cochrane Central Register of Controlled Trials"
+      }
+    }
+  ]
+}

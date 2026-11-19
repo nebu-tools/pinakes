@@ -1,0 +1,66 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "31234567",
+      "type": "article-journal",
+      "title": "Moth counts under LED lamps",
+      "container-title": "J Noct Ecol",
+      "volume": "382",
+      "issue": "4",
+      "page": "301-310",
+      "DOI": "10.5555/jne.1",
+      "PMID": "31234567",
+      "author": [
+        {
+          "family": "Müller",
+          "given": "Anna"
+        },
+        {
+          "family": "Smith",
+          "given": "John B."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020,
+            5,
+            1
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "31234567"
+      }
+    },
+    {
+      "id": "2",
+      "type": "webpage",
+      "title": "Bestimmungshilfe Nachtfalter",
+      "URL": "https://www.example.org/x",
+      "author": [
+        {
+          "literal": "Northwind Field Station GmbH"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2024
+          ]
+        ]
+      },
+      "accessed": {
+        "date-parts": [
+          [
+            2026,
+            11,
+            2
+          ]
+        ]
+      }
+    }
+  ]
+}

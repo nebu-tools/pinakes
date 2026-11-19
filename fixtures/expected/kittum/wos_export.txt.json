@@ -1,0 +1,164 @@
+{
+  "format": "wos",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "WOS:000500000100007",
+      "type": "article-journal",
+      "title": "Streetlight-Moth Interactions in Meadows Bordering Rural Roads Lit Since the 1970s",
+      "container-title": "JOURNAL OF NOCTURNAL ECOLOGY",
+      "container-title-short": "J. Noct. Ecol.",
+      "volume": "373",
+      "issue": "3",
+      "page": "220-231",
+      "abstract": "BACKGROUND Moths are among the most important pollinators of meadow plants at night, and artificial light draws them away from flowers. METHODS We conducted two paired, replicated, observer-blind field surveys (LANTERN and BEACON).",
+      "language": "English",
+      "DOI": "10.5555/ecola.1409547",
+      "PMID": "30000101",
+      "ISSN": "0021-8790",
+      "author": [
+        {
+          "family": "Halvorsen",
+          "given": "C. E."
+        },
+        {
+          "family": "Ebdon",
+          "given": "J. S."
+        },
+        {
+          "family": "Rasmussen",
+          "given": "B. W."
+        },
+        {
+          "literal": "LANTERN Survey Grp"
+        },
+        {
+          "literal": "BEACON Survey Grp"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015,
+            7,
+            16
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "WOS:000500000100007",
+        "database": "Web of Science",
+        "publication-type": [
+          "Article"
+        ],
+        "source-fields": [
+          {
+            "format": "wos",
+            "name": "J9",
+            "value": "J NOCT ECOL"
+          },
+          {
+            "format": "wos",
+            "name": "PG",
+            "value": "12"
+          },
+          {
+            "format": "wos",
+            "name": "WC",
+            "value": "Ecology; Entomology"
+          },
+          {
+            "format": "wos",
+            "name": "DA",
+            "value": "2024-05-10"
+          },
+          {
+            "format": "wos",
+            "name": "AU",
+            "value": "Halvorsen, CE\nEbdon, JS\nRasmussen, BW"
+          },
+          {
+            "format": "wos",
+            "name": "EI",
+            "value": "1365-2656"
+          },
+          {
+            "format": "wos",
+            "name": "PD",
+            "value": "JUL 16"
+          },
+          {
+            "format": "wos",
+            "name": "PT",
+            "value": "J"
+          }
+        ]
+      }
+    },
+    {
+      "id": "WOS:000500000300016",
+      "type": "article-journal",
+      "title": "Moth Counts Beneath Amber and White Streetlights in Gardens Aged 6-11 Years Since Planting",
+      "container-title": "AMERICAN JOURNAL OF NOCTURNAL AND CREPUSCULAR ECOLOGY",
+      "volume": "195",
+      "issue": "7",
+      "page": "912-920",
+      "abstract": "Rationale: Amber streetlights attracted fewer moths in earlier surveys of gardens bordering roads that had been lit for the whole of the gardens' lives. Survey registration: S-01897233.",
+      "language": "English",
+      "DOI": "10.5555/ajnce.201608-1754oc",
+      "PMID": "30000303",
+      "author": [
+        {
+          "family": "Marlowe",
+          "given": "Cosima E."
+        },
+        {
+          "family": "Rautio",
+          "given": "Freya"
+        },
+        {
+          "family": "Mahadevan",
+          "given": "Gita"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017,
+            4,
+            1
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "WOS:000500000300016",
+        "database": "Web of Science",
+        "publication-type": [
+          "Article"
+        ],
+        "source-fields": [
+          {
+            "format": "wos",
+            "name": "DA",
+            "value": "2024-05-10"
+          },
+          {
+            "format": "wos",
+            "name": "AU",
+            "value": "Marlowe, CE\nRautio, F\nMahadevan, G"
+          },
+          {
+            "format": "wos",
+            "name": "PD",
+            "value": "APR 1"
+          },
+          {
+            "format": "wos",
+            "name": "PT",
+            "value": "J"
+          }
+        ]
+      }
+    }
+  ]
+}

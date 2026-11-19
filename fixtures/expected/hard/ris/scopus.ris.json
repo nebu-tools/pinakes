@@ -1,0 +1,44 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "1",
+      "type": "article-journal",
+      "title": "Streetlight-moth interactions in meadows bordering rural roads lit since the 1970s",
+      "container-title": "Journal of Nocturnal Ecology",
+      "container-title-short": "J. Noct. Ecol.",
+      "volume": "373",
+      "issue": "3",
+      "number": "e1023",
+      "genre": "Article",
+      "abstract": "Moths are among the most important pollinators of meadow plants at night.",
+      "language": "English",
+      "note": "Cited By :1250; Export Date: 10 May 2024",
+      "URL": "https://www.scopus.com/inward/record.uri?eid=2-s2.0-85000000101",
+      "DOI": "10.5555/ecola.1409547",
+      "ISSN": "0021-8790",
+      "keyword": "moths, light pollution",
+      "author": [
+        {
+          "family": "Halvorsen",
+          "given": "C. E."
+        },
+        {
+          "family": "Ebdon",
+          "given": "J. S."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2015
+          ]
+        ]
+      },
+      "custom": {
+        "database": "Scopus"
+      }
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "pinakes"
+version = "0.1.0"
+description = "Read, write, normalise and de-duplicate bibliographic references"
+license = "AGPL-3.0-only"
+requires-python = ">=3.9"
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: 3",
+]
+
+[project.urls]
+Repository = "https://github.com/nebu-tools/pinakes"
+
+[tool.maturin]
+python-source = "python"
+module-name = "pinakes._pinakes"
+manifest-path = "Cargo.toml"
+features = []

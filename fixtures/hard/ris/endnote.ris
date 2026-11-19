@@ -1,0 +1,57 @@
+TY  - JOUR
+AU  - van der Berg, Jan
+AU  - de la Cruz, Marta
+AU  - Le Guin, Ursula K.
+AU  - Smith, John, Jr.
+AU  - Royal Astronomical Society
+AU  - 王, 小明
+AU  - Иванов, Иван
+TI  - Moths, bats and the
+night sky:
+a long title over three lines
+T2  - Journal of Nocturnal Ecology
+SP  - 101-9
+VL  - 12
+IS  - 3
+PY  - 2019///
+DA  - 2019/03/15/Spring
+KW  - moths
+KW  - light pollution
+KW  - moths
+UR  - https://example.org/a
+UR  - https://example.org/b
+N1  - First note.
+N1  - Second note.
+ER  -
+
+TY  - CHAP
+A1  - Ödegård, Åsa
+A2  - Okonkwo, Ada
+A2  - Ferrand, Paul
+T1  - Glow-worms
+T2  - Field Guide to Night Life
+SP  - S12
+EP  - S19
+PY  - 2021 Mar-Apr
+PB  - Northwind Press
+CY  - Oxford
+SN  - 978-0-306-40615-7
+ET  - 2nd
+ER  -
+
+TY  - CONF
+AU  - Ngata, Aroha
+TI  - Glow-worm displays fade near lit paths
+T2  - Proceedings of the Night Ecology Meeting
+C1  - Wellington
+SP  - e1023
+PY  - n.d.
+DO  - https://dx.doi.org/10.5555/NEM.2020.7
+AN  - arXiv:2101.00001v2
+ER  -
+
+TY  - RPRT
+AU  - Adeyemi, Daniel
+TI  - A record the export cut off
+PY  - 2020
+SP  - 12–19

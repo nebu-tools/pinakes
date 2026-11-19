@@ -1,0 +1,65 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "615024109",
+      "type": "article-journal",
+      "title": "Moth abundance and diversity after the dimming of streetlights",
+      "container-title": "Journal of Nocturnal Ecology",
+      "abstract": "Objective: To compare moth counts before and after streetlights were dimmed. Survey S-1807897.",
+      "note": "Survey number: S-1807897",
+      "URL": "https://www.embase.com/records/615024109",
+      "DOI": "10.5555/j.jne.2017.01.008",
+      "author": [
+        {
+          "family": "Kovar",
+          "given": "M. W."
+        },
+        {
+          "family": "McAvoy",
+          "given": "E. F."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "615024109"
+      }
+    },
+    {
+      "id": "619550824",
+      "type": "article-journal",
+      "title": "Wing-scale colour in moths collected under sodium lamps",
+      "container-title": "Annals of Lepidopterology",
+      "abstract": "Moths from twelve sites were compared. Specimens deposited as GBIF 2014-003667-28.",
+      "note": "Lamp supplier: Northwind Lighting",
+      "DOI": "10.5555/ecola.1709846",
+      "author": [
+        {
+          "family": "Redfern",
+          "given": "S. M."
+        },
+        {
+          "family": "Dorsey",
+          "given": "C."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2017
+          ]
+        ]
+      },
+      "custom": {
+        "accession-number": "619550824"
+      }
+    }
+  ]
+}

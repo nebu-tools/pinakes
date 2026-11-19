@@ -1,0 +1,52 @@
+{
+  "format": "ris",
+  "diagnostics": [],
+  "references": [
+    {
+      "id": "CN-02579112",
+      "type": "article-journal",
+      "title": "Comet tails observed from dark-sky reserves in the northern hemisphere",
+      "container-title": "Journal of amateur astronomy",
+      "abstract": "A coordinated campaign of amateur observers photographed three comets from twelve dark-sky reserves. S-4305496.",
+      "DOI": "10.5555/astro.2214131",
+      "author": [
+        {
+          "family": "Tolland",
+          "given": "N. C."
+        },
+        {
+          "family": "Okwu",
+          "given": "M."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2023
+          ]
+        ]
+      }
+    },
+    {
+      "id": "CN-02063985",
+      "type": "article-journal",
+      "title": "Sky brightness before and after the conversion of a city's streetlights to LEDs (SKYGLOW): a before-after survey",
+      "container-title": "Telescope letters",
+      "abstract": "Sky brightness was measured at forty sites around one city before and after conversion. S-1992952.",
+      "DOI": "10.5555/s0035-8711(19)30817-4",
+      "author": [
+        {
+          "family": "Jarrow",
+          "given": "R. H."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      }
+    }
+  ]
+}

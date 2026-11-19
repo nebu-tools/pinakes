@@ -1,0 +1,22 @@
+{
+  "format": "ris",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "ris.stray-text",
+      "line": 1,
+      "record": null,
+      "field": null,
+      "message": "Text outside any record was not read: \"- orphaned continuation\""
+    },
+    {
+      "severity": "error",
+      "code": "ris.no-records",
+      "line": null,
+      "record": null,
+      "field": null,
+      "message": "Found no RIS records (a record starts with a TY line)"
+    }
+  ],
+  "references": []
+}

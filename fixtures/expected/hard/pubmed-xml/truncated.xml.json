@@ -1,0 +1,27 @@
+{
+  "format": "pubmed-xml",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "xml.unclosed",
+      "line": 4,
+      "record": null,
+      "field": null,
+      "message": "The file ends with <PubmedArticleSet> <PubmedArticle> <MedlineCitation> <Article> <ArticleTitle> still open; it may be cut off"
+    }
+  ],
+  "references": [
+    {
+      "id": "30002001",
+      "type": "article-journal",
+      "title": "Kept & whole",
+      "PMID": "30002001"
+    },
+    {
+      "id": "30002002",
+      "type": "article-journal",
+      "title": "Cut off here <raw>",
+      "PMID": "30002002"
+    }
+  ]
+}

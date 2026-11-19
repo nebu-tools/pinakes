@@ -1,0 +1,95 @@
+{
+  "format": "csv",
+  "diagnostics": [
+    {
+      "severity": "error",
+      "code": "csv.unclosed-quote",
+      "line": 7,
+      "record": null,
+      "field": null,
+      "message": "A quoted field from line 7 is never closed; read the rest of the file as that field"
+    },
+    {
+      "severity": "warning",
+      "code": "record.no-title",
+      "line": 6,
+      "record": 2,
+      "field": null,
+      "message": "Record 3 has no title"
+    },
+    {
+      "severity": "info",
+      "code": "csv.short-row",
+      "line": 7,
+      "record": 3,
+      "field": null,
+      "message": "Row has 2 cells and the header 5"
+    }
+  ],
+  "references": [
+    {
+      "id": "1",
+      "type": "document",
+      "title": "A title with a comma, a \"quote\" and a line break",
+      "note": "multi\nline",
+      "DOI": "10.5555/jne.2019.1",
+      "author": [
+        {
+          "family": "Adeyemi",
+          "given": "D."
+        },
+        {
+          "family": "Lind",
+          "given": "K."
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2019
+          ]
+        ]
+      }
+    },
+    {
+      "id": "2",
+      "type": "document",
+      "title": "Second title",
+      "issued": {
+        "date-parts": [
+          [
+            2020
+          ]
+        ]
+      }
+    },
+    {
+      "id": "3",
+      "type": "document",
+      "note": "a row with no title",
+      "author": [
+        {
+          "family": "Nobody"
+        }
+      ],
+      "issued": {
+        "date-parts": [
+          [
+            2021
+          ]
+        ]
+      }
+    },
+    {
+      "id": "4",
+      "type": "document",
+      "title": "Unclosed quote",
+      "author": [
+        {
+          "family": "Lind K.",
+          "given": "2022"
+        }
+      ]
+    }
+  ]
+}
