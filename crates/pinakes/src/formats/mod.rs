@@ -136,9 +136,34 @@ impl Format {
             return Some(Format::WosTab);
         }
         let lines: Vec<&str> = start.lines().take(200).collect();
+        // The first line decides first: it may itself start a record (`@article{title,` also
+        // parses as a CSV header with an `articletitle` column, but it is BibTeX).
+        if let Some(first_line) = lines.first() {
+            if first_line.starts_with("PMID-") {
+                return Some(Format::Medline);
+            }
+            if ris::tag_line(first_line).is_some_and(|(t, _)| t.eq_ignore_ascii_case("TY")) {
+                return Some(Format::Ris);
+            }
+            if is_bib_entry(first_line.trim_start()) {
+                return Some(Format::Bibtex);
+            }
+        }
+        // A valid CSV header decides before any data row: a value may itself look like
+        // `TY  - JOUR` or `@article{` (for example `TY  - JOUR,2020` under `Title,Year`).
+        // A BibTeX `%` comment is not a header even when it lists columns (`% Title,Year`).
+        if !first.trim_start().starts_with('%') {
+            let rows = csv::rows(first, csv::sniff_delimiter(first), true, &mut Vec::new());
+            if rows
+                .first()
+                .is_some_and(|r| csv::is_record_header(&r.cells))
+            {
+                return Some(Format::Csv);
+            }
+        }
         // The first line that starts a record decides: a later one may be text inside a field
         // (an abstract quoting "TY  - JOUR", a note holding "@article{").
-        for l in &lines {
+        for l in lines.iter().skip(1) {
             if l.starts_with("PMID-") {
                 return Some(Format::Medline);
             }

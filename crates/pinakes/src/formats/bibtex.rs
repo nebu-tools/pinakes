@@ -14,7 +14,7 @@
 
 mod inherit;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use crate::dates::{month_number, parse_date};
 use crate::diag::Diagnostic;
@@ -69,10 +69,14 @@ impl<'a> Lexer<'a> {
         self.b.get(self.i).copied()
     }
 
-    /// A balanced group starting at an opening delimiter; returns the inside.
+    /// A balanced group starting at an opening delimiter; returns the inside. The closing
+    /// delimiter wins over an entry marker: a balanced value that holds `@article{` at the
+    /// start of a line (or an `@comment` holding an example entry) reads whole. The entry
+    /// marker only recovers an unterminated value, when no closing delimiter follows.
     fn balanced(&mut self, open: u8, close: u8) -> Result<&'a str, Broken> {
         let start = self.i;
         let mut depth = 0usize;
+        let mut entry_at: Option<usize> = None;
         while self.i < self.b.len() {
             let c = self.b[self.i];
             if c == b'\\' {
@@ -82,6 +86,10 @@ impl<'a> Lexer<'a> {
             if c == open {
                 depth += 1;
             } else if c == close {
+                if depth == 0 {
+                    // A close with nothing open: unbalanced before any entry marker.
+                    break;
+                }
                 depth -= 1;
                 if depth == 0 {
                     self.i += 1;
@@ -90,14 +98,19 @@ impl<'a> Lexer<'a> {
             } else if c == b'@'
                 && open == b'{'
                 && depth <= 1
+                && entry_at.is_none()
                 && self.at_line_start(self.i)
                 && self.looks_like_entry(self.i)
             {
-                break;
+                entry_at = Some(self.i);
             }
             self.i += 1;
         }
-        self.i = self.i.min(self.b.len());
+        if let Some(at) = entry_at {
+            self.i = at;
+        } else {
+            self.i = self.i.min(self.b.len());
+        }
         Err(Broken("bibtex.unclosed", "a brace is not closed", start))
     }
 
@@ -119,21 +132,99 @@ impl<'a> Lexer<'a> {
         let start = self.i;
         self.i += 1;
         let mut depth = 0usize;
+        let mut entry_at: Option<usize> = None;
         while self.i < self.b.len() {
             match self.b[self.i] {
                 b'\\' => self.i += 1,
                 b'{' => depth += 1,
                 b'}' => depth = depth.saturating_sub(1),
                 b'"' if depth == 0 => {
-                    self.i += 1;
-                    return Ok(&self.src[start + 1..self.i - 1]);
+                    // Whether this quote opens a field value (`title="..."`): skip back over
+                    // white space to `=`. An opening of the next entry's field can never
+                    // close this value; a closing is never preceded by `=`.
+                    let mut k = self.i;
+                    while k > start + 1 && matches!(self.b[k - 1], b' ' | b'\t' | b'\n' | b'\r') {
+                        k -= 1;
+                    }
+                    let is_opening = k > start + 1 && self.b[k - 1] == b'=';
+                    if let Some(at) = entry_at {
+                        // An entry-shaped line was seen. An opening belongs to that entry:
+                        // recover there instead of swallowing it. A closing with a valid
+                        // continuation ends the outer field instead: the entry-shaped text
+                        // was quoted text, not a new entry.
+                        if is_opening {
+                            self.i = at;
+                            break;
+                        }
+                        let mut j = self.i + 1;
+                        loop {
+                            while j < self.b.len()
+                                && matches!(self.b[j], b' ' | b'\t' | b'\n' | b'\r')
+                            {
+                                j += 1;
+                            }
+                            if j < self.b.len() && self.b[j] == b'%' {
+                                while j < self.b.len() && self.b[j] != b'\n' {
+                                    j += 1;
+                                }
+                                continue;
+                            }
+                            break;
+                        }
+                        let boundary = matches!(
+                            self.b.get(j),
+                            None | Some(b',') | Some(b'}') | Some(b')') | Some(b'#') | Some(b'@')
+                        );
+                        if boundary {
+                            self.i += 1;
+                            return Ok(&self.src[start + 1..self.i - 1]);
+                        }
+                        self.i = at;
+                        break;
+                    }
+                    // Without an entry boundary, a preceding `=` does not prove an opening:
+                    // `title="A = B ="` closes with `=` before the quote. Accept any quote
+                    // followed by a field boundary; entry structure (above) identifies
+                    // openings that belong to a subsequent record.
+                    let mut j = self.i + 1;
+                    loop {
+                        while j < self.b.len() && matches!(self.b[j], b' ' | b'\t' | b'\n' | b'\r')
+                        {
+                            j += 1;
+                        }
+                        if j < self.b.len() && self.b[j] == b'%' {
+                            while j < self.b.len() && self.b[j] != b'\n' {
+                                j += 1;
+                            }
+                            continue;
+                        }
+                        break;
+                    }
+                    let boundary = matches!(
+                        self.b.get(j),
+                        None | Some(b',') | Some(b'}') | Some(b')') | Some(b'#') | Some(b'@')
+                    );
+                    if boundary {
+                        self.i += 1;
+                        return Ok(&self.src[start + 1..self.i - 1]);
+                    }
+                    // No entry to recover to: ignore this quote and keep scanning.
                 }
-                b'@' if self.at_line_start(self.i) && self.looks_like_entry(self.i) => break,
+                b'@' if entry_at.is_none()
+                    && self.at_line_start(self.i)
+                    && self.looks_like_entry(self.i) =>
+                {
+                    entry_at = Some(self.i)
+                }
                 _ => {}
             }
             self.i += 1;
         }
-        self.i = self.i.min(self.b.len());
+        if let Some(at) = entry_at {
+            self.i = at;
+        } else {
+            self.i = self.i.min(self.b.len());
+        }
         Err(Broken(
             "bibtex.unclosed-quote",
             "a quoted value is not closed",
@@ -1375,12 +1466,99 @@ fn frame(v: &str) -> String {
 /// Write BibTeX (`biblatex == false`: classic field names, LaTeX accents for anything outside
 /// ASCII) or BibLaTeX (`journaltitle`, `date`, `location`, Unicode kept).
 pub fn write(refs: &[Reference], biblatex: bool, diags: &mut Vec<Diagnostic>) -> String {
-    let keys = crate::key::keys_for_writing(refs);
+    // Keys are unique before sanitizing, but `a+b%` and `a+b_` both sanitize to `a+b_`.
+    // Make the written keys unique after sanitizing; any change reads back and is reported.
+    // Unchanged keys win so that `crossref` keeps pointing at the record it named:
+    // with `a+b%`, `a+b_` and `a+b_a`, the second and third keep their names.
+    fn suffix(mut n: usize) -> String {
+        let mut out = Vec::new();
+        loop {
+            out.push(b'a' + (n % 26) as u8);
+            if n < 26 {
+                break;
+            }
+            n = n / 26 - 1;
+        }
+        out.reverse();
+        String::from_utf8(out).unwrap_or_default()
+    }
+    fn clean_link(v: &str) -> &str {
+        v.trim()
+            .trim_start_matches('{')
+            .trim_end_matches('}')
+            .trim()
+    }
+    let raw_keys = crate::key::keys_for_writing(refs);
+    let bases: Vec<String> = raw_keys.iter().map(|k| bib_key(k)).collect();
+    let mut taken: HashSet<String> = HashSet::new();
+    let mut keys: Vec<Option<String>> = vec![None; refs.len()];
+    // Reserve the keys sanitizing leaves alone first, so a changed key never steals one.
+    for (i, (raw, base)) in raw_keys.iter().zip(&bases).enumerate() {
+        if raw == base && taken.insert(base.clone()) {
+            keys[i] = Some(base.clone());
+        }
+    }
+    for (i, base) in bases.iter().enumerate() {
+        if keys[i].is_some() {
+            continue;
+        }
+        if taken.insert(base.clone()) {
+            keys[i] = Some(base.clone());
+            continue;
+        }
+        let mut n = 0usize;
+        loop {
+            let k = format!("{}{}", base, suffix(n));
+            if taken.insert(k.clone()) {
+                keys[i] = Some(k);
+                break;
+            }
+            n += 1;
+        }
+    }
+    let keys: Vec<String> = keys.into_iter().map(Option::unwrap_or_default).collect();
+    // The old key each written key replaces, so `crossref` and `xref` keep pointing at the
+    // same record after sanitizing renames it. Like the reader, exact match wins and a key
+    // that only matches ignoring case is used with the same first-wins order. Original
+    // citation keys resolve first; generated aliases (duplicate suffixes) are fallback only,
+    // so a generated `Parenta` never shadows an original `PARENTa` for `parenta`.
+    // Exact original, then case-insensitive original, then exact generated, then
+    // case-insensitive generated: `crossref={Parenta}` with originals `Parent`,
+    // `Parent`, `PARENTa` resolves to `PARENTa`, like the reader.
+    let mut orig_exact: HashMap<String, String> = HashMap::new();
+    let mut orig_folded: HashMap<String, String> = HashMap::new();
+    for (r, final_key) in refs.iter().zip(&keys) {
+        if let Some(k) = r.citation_key.as_deref() {
+            let k = k.trim().to_string();
+            orig_exact
+                .entry(k.clone())
+                .or_insert_with(|| final_key.clone());
+            orig_folded
+                .entry(k.to_lowercase())
+                .or_insert_with(|| final_key.clone());
+        }
+    }
+    let mut gen_exact: HashMap<String, String> = HashMap::new();
+    let mut gen_folded: HashMap<String, String> = HashMap::new();
+    for (raw, final_key) in raw_keys.iter().zip(&keys) {
+        gen_exact
+            .entry(raw.clone())
+            .or_insert_with(|| final_key.clone());
+        gen_folded
+            .entry(raw.to_lowercase())
+            .or_insert_with(|| final_key.clone());
+    }
     let ascii = !biblatex;
     let mut out = String::new();
     for (i, (r, key)) in refs.iter().zip(keys).enumerate() {
         let label = crate::check::label(r, i);
-        let mut verbatim = |field: &str, value: &str, url_like: bool| -> String {
+        let verbatim = |field: &str,
+                        value: &str,
+                        url_like: bool,
+                        diags: &mut Vec<Diagnostic>,
+                        label: &str,
+                        i: usize|
+         -> String {
             let (written, code) = verbatim_value(value, url_like);
             if let Some(code) = code {
                 let what = if code == "bibtex.verbatim-encoded" {
@@ -1417,7 +1595,6 @@ pub fn write(refs: &[Reference], biblatex: bool, diags: &mut Vec<Diagnostic>) ->
             .find(|f| f.name == "@type")
             .map(|f| bib_word(&f.value, default_ty))
             .unwrap_or_else(|| default_ty.to_string());
-        let key = bib_key(&key);
         // (name, value, bare): a bare value is a macro name such as `may`.
         let mut fields: Vec<(String, String, bool)> = Vec::new();
         let mut add = |name: &str, value: String| {
@@ -1565,7 +1742,7 @@ pub fn write(refs: &[Reference], biblatex: bool, diags: &mut Vec<Diagnostic>) ->
         ];
         for (name, field, value, url_like) in identifiers {
             if let Some(v) = value.as_deref().filter(|v| !v.trim().is_empty()) {
-                let written = verbatim(field, v, url_like);
+                let written = verbatim(field, v, url_like, &mut *diags, &label, i);
                 fields.push((name.to_string(), written, false));
             }
         }
@@ -1574,7 +1751,7 @@ pub fn write(refs: &[Reference], biblatex: bool, diags: &mut Vec<Diagnostic>) ->
             r.arxiv.as_deref().filter(|a| !a.trim().is_empty()),
             has_eprint,
         ) {
-            let written = verbatim("custom.arxiv", a, false);
+            let written = verbatim("custom.arxiv", a, false, &mut *diags, &label, i);
             fields.push(("eprint".into(), written, false));
             fields.push((
                 if biblatex {
@@ -1624,17 +1801,52 @@ pub fn write(refs: &[Reference], biblatex: bool, diags: &mut Vec<Diagnostic>) ->
                 continue;
             }
             let name = bib_word(&f.name, "field");
+            // `@xdata` entries are dropped once their fields are inherited, so an `xdata`
+            // link would point at nothing. Leave it out and report it; the fields stay.
+            if name == "xdata" {
+                diags.push(
+                    Diagnostic::warning(
+                        "bibtex.left-out",
+                        format!(
+                            "{label}: xdata {:?} has no @xdata entry in the output; left it out, keeping the inherited fields",
+                            f.value,
+                        ),
+                    )
+                    .record(i)
+                    .field("custom.source-fields"),
+                );
+                continue;
+            }
             if fields.iter().any(|(n, v, _)| *n == name && *v == f.value) {
                 continue;
+            }
+            // `crossref` and `xref` name entries by their old keys; point them at the written
+            // keys instead, so sanitizing never retargets a link.
+            let owned: String;
+            let mut value_ref = f.value.as_str();
+            if matches!(name.as_str(), "crossref" | "xref") {
+                let old = clean_link(&f.value);
+                let mapped = orig_exact
+                    .get(old)
+                    .or_else(|| orig_folded.get(&old.to_lowercase()))
+                    .or_else(|| gen_exact.get(old))
+                    .or_else(|| gen_folded.get(&old.to_lowercase()));
+                if let Some(mapped) = mapped {
+                    owned = mapped.clone();
+                    value_ref = &owned;
+                }
             }
             let value = if VERBATIM.contains(&name.as_str()) {
                 verbatim(
                     "custom.source-fields",
-                    &f.value,
+                    value_ref,
                     matches!(name.as_str(), "url" | "urlraw" | "doi"),
+                    &mut *diags,
+                    &label,
+                    i,
                 )
             } else {
-                frame(&f.value)
+                frame(value_ref)
             };
             fields.push((name, value, false));
         }
